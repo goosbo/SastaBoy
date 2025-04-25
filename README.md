@@ -1,2 +1,1 @@
-Work in progress rust gameboy emulator 
-don't judge yet it's not complete :( 
+Work in progress rust gameboy emulator. Don't judge yet it's not complete :( 
