@@ -1,5 +1,20 @@
 
 #[derive(Debug)]
+struct MemBus{
+    mem: [u8; 0xFFFF]
+}
+
+impl MemBus{
+    pub fn read(&self, addr: usize) -> u8{
+        self.mem[addr]
+    }
+
+    pub fn write(&mut self, addr: usize, val: u8){
+        self.mem[addr] = val;
+    }
+}
+
+#[derive(Debug)]
 pub struct CPU {
     reg_a: u8,
     reg_b: u8,
@@ -10,7 +25,8 @@ pub struct CPU {
     reg_h: u8,
     reg_l: u8,
     sp: u16,
-    pc: u16
+    pc: u16,
+    bus: MemBus
 }
 
 impl CPU{
@@ -25,7 +41,10 @@ impl CPU{
             reg_h: 0,
             reg_l: 0,
             sp: 0,
-            pc: 0
+            pc: 0,
+            bus: MemBus{
+                mem: [0; 0xFFFF]
+            }
         }
 
     }
@@ -83,14 +102,7 @@ impl CPU{
     // }
 
     // temporary memory function
-    fn read_mem(addr:usize)-> u8{
-        0
-    }
-
-    // temporary memory write function
-    fn write_mem(addr:usize,val:u8){
-
-    }
+   
 
     pub fn run_opcode(&mut self,op:u8) -> u8{
         let mut mcycles = 0;
@@ -152,234 +164,234 @@ impl CPU{
             0x7F => {self.reg_a = self.reg_a; mcycles = 1},
 
             0x06 => {
-                let z: u8 = Self::read_mem(self.pc as usize);
+                let z: u8 = self.bus.read(self.pc as usize);
                 self.pc += 1;
                 self.reg_b = z;
                 mcycles = 2;
             },
             0x0E => {
-                let z: u8 = Self::read_mem(self.pc as usize);
+                let z: u8 = self.bus.read(self.pc as usize);
                 self.pc += 1;
                 self.reg_c = z;
                 mcycles = 2;
             },
             0x16 => {
-                let z: u8 = Self::read_mem(self.pc as usize);
+                let z: u8 = self.bus.read(self.pc as usize);
                 self.pc += 1;
                 self.reg_d = z;
                 mcycles = 2;
             },
             0x1E => {
-                let z: u8 = Self::read_mem(self.pc as usize);
+                let z: u8 = self.bus.read(self.pc as usize);
                 self.pc += 1;
                 self.reg_e = z;
                 mcycles = 2;
             },
             0x26 => {
-                let z: u8 = Self::read_mem(self.pc as usize);
+                let z: u8 = self.bus.read(self.pc as usize);
                 self.pc += 1;
                 self.reg_h = z;
                 mcycles = 2;
             },
             0x2E => {
-                let z: u8 = Self::read_mem(self.pc as usize);
+                let z: u8 = self.bus.read(self.pc as usize);
                 self.pc += 1;
                 self.reg_l = z;
                 mcycles = 2;
             },
             0x3E => {
-                let z: u8 = Self::read_mem(self.pc as usize);
+                let z: u8 = self.bus.read(self.pc as usize);
                 self.pc += 1;
                 self.reg_a = z;
                 mcycles = 2;
             },
 
             0x46 => {
-                let z:u8 = Self::read_mem(self.get_hl() as usize);
+                let z:u8 = self.bus.read(self.get_hl() as usize);
                 self.reg_b = z;
                 mcycles = 2;
             },
             0x4E => {
-                let z:u8 = Self::read_mem(self.get_hl() as usize);
+                let z:u8 = self.bus.read(self.get_hl() as usize);
                 self.reg_c = z;
                 mcycles = 2;
             },
             0x56 => {
-                let z:u8 = Self::read_mem(self.get_hl() as usize);
+                let z:u8 = self.bus.read(self.get_hl() as usize);
                 self.reg_d = z;
                 mcycles = 2;
             },
             0x5E => {
-                let z:u8 = Self::read_mem(self.get_hl() as usize);
+                let z:u8 = self.bus.read(self.get_hl() as usize);
                 self.reg_e = z;
                 mcycles = 2;
             },
             0x66 => {
-                let z:u8 = Self::read_mem(self.get_hl() as usize);
+                let z:u8 = self.bus.read(self.get_hl() as usize);
                 self.reg_h = z;
                 mcycles = 2;
             },
             0x6E => {
-                let z:u8 = Self::read_mem(self.get_hl() as usize);
+                let z:u8 = self.bus.read(self.get_hl() as usize);
                 self.reg_l = z;
                 mcycles = 2;
             },
             0x7E => {
-                let z:u8 = Self::read_mem(self.get_hl() as usize);
+                let z:u8 = self.bus.read(self.get_hl() as usize);
                 self.reg_a = z;
                 mcycles = 2;
             },
 
             0x70 => {
-                Self::write_mem(self.get_hl() as usize, self.reg_b);
+                self.bus.write(self.get_hl() as usize, self.reg_b);
                 mcycles = 2;
             },
             0x71 => {
-                Self::write_mem(self.get_hl() as usize, self.reg_c);
+                self.bus.write(self.get_hl() as usize, self.reg_c);
                 mcycles = 2;
             },
             0x72 => {
-                Self::write_mem(self.get_hl() as usize, self.reg_d);
+                self.bus.write(self.get_hl() as usize, self.reg_d);
                 mcycles = 2;
             },
             0x73 => {
-                Self::write_mem(self.get_hl() as usize, self.reg_e);
+                self.bus.write(self.get_hl() as usize, self.reg_e);
                 mcycles = 2;
             },
             0x74 => {
-                Self::write_mem(self.get_hl() as usize, self.reg_h);
+                self.bus.write(self.get_hl() as usize, self.reg_h);
                 mcycles = 2;
             },
             0x75 => {
-                Self::write_mem(self.get_hl() as usize, self.reg_l);
+                self.bus.write(self.get_hl() as usize, self.reg_l);
                 mcycles = 2;
             },
             0x77 => {
-                Self::write_mem(self.get_hl() as usize, self.reg_a);
+                self.bus.write(self.get_hl() as usize, self.reg_a);
                 mcycles = 2;
             },
 
             0x36 => {
-                let z = Self::read_mem(self.pc as usize);
+                let z = self.bus.read(self.pc as usize);
                 self.pc += 1;
-                Self::write_mem(self.get_hl() as usize, z);
+                self.bus.write(self.get_hl() as usize, z);
                 mcycles = 3;
             },
 
             0x0A => {
-                let z:u8 = Self::read_mem(self.get_bc() as usize);
+                let z:u8 = self.bus.read(self.get_bc() as usize);
                 self.reg_a = z;
                 mcycles = 2;
             },
             0x1A => {
-                let z:u8 = Self::read_mem(self.get_de() as usize);
+                let z:u8 = self.bus.read(self.get_de() as usize);
                 self.reg_a = z;
                 mcycles = 2;
             },
             0x02 => {
-                Self::write_mem(self.get_bc() as usize, self.reg_a);
+                self.bus.write(self.get_bc() as usize, self.reg_a);
                 mcycles = 2;
             },
             0x12 => {
-                Self::write_mem(self.get_de() as usize, self.reg_a);
+                self.bus.write(self.get_de() as usize, self.reg_a);
                 mcycles = 2;
             },
             0xFA => {
-                let z:u16 = Self::read_mem(self.pc as usize) as u16;
+                let z:u16 = self.bus.read(self.pc as usize) as u16;
                 self.pc += 1;
-                let z2:u16 = Self::read_mem(self.pc as usize) as u16;
+                let z2:u16 = self.bus.read(self.pc as usize) as u16;
                 self.pc += 1;
-                self.reg_a = Self::read_mem((z|z2<<8) as usize);
+                self.reg_a = self.bus.read((z|z2<<8) as usize);
                 mcycles = 4;
             },
             0xEA => {
-                let z:u16 = Self::read_mem(self.pc as usize) as u16;
+                let z:u16 = self.bus.read(self.pc as usize) as u16;
                 self.pc += 1;
-                let z2:u16 = Self::read_mem(self.pc as usize) as u16;
+                let z2:u16 = self.bus.read(self.pc as usize) as u16;
                 self.pc += 1;
-                Self::write_mem((z|z2<<8) as usize, self.reg_a);
+                self.bus.write((z|z2<<8) as usize, self.reg_a);
                 mcycles = 4;
             },
 
             0xF2 => {
-                let z:u8 = Self::read_mem((0xFF00|(self.reg_c as u16)) as usize);
+                let z:u8 = self.bus.read((0xFF00|(self.reg_c as u16)) as usize);
                 self.reg_a = z;
                 mcycles = 2;
             },
             0xE2 => {
-                Self::write_mem((0xFF00|self.reg_c as u16) as usize, self.reg_a);
+                self.bus.write((0xFF00|self.reg_c as u16) as usize, self.reg_a);
                 mcycles = 2;
             },
 
             0xF0 => {
-                let z:u8 = Self::read_mem((0xFF00|(self.pc as u16)) as usize);
+                let z:u8 = self.bus.read((0xFF00|(self.pc as u16)) as usize);
                 self.pc += 1;
                 self.reg_a = z;
                 mcycles = 3;
             },
             0xE0 => {
-                let z:u8 = Self::read_mem((0xFF00|(self.pc as u16)) as usize);
+                let z:u8 = self.bus.read((0xFF00|(self.pc as u16)) as usize);
                 self.pc += 1;
-                Self::write_mem((0xFF00|(self.pc as u16)) as usize, self.reg_a);
+                self.bus.write((0xFF00|(self.pc as u16)) as usize, self.reg_a);
                 mcycles = 3;
             },
 
             0x3A => {
-                let z:u8 = Self::read_mem(self.get_hl() as usize);
+                let z:u8 = self.bus.read(self.get_hl() as usize);
                 self.reg_a = z;
                 self.set_hl(self.get_hl()-1);
                 mcycles = 2;
             },
             0x32 => {
-                Self::write_mem(self.get_hl() as usize, self.reg_a);
+                self.bus.write(self.get_hl() as usize, self.reg_a);
                 self.set_hl(self.get_hl()-1);
                 mcycles = 2;
             },
 
             0x2A => {
-                let z:u8 = Self::read_mem(self.get_hl() as usize);
+                let z:u8 = self.bus.read(self.get_hl() as usize);
                 self.reg_a = z;
                 self.set_hl(self.get_hl()+1);
                 mcycles = 2;
             },
             0x22 => {
-                Self::write_mem(self.get_hl() as usize, self.reg_a);
+                self.bus.write(self.get_hl() as usize, self.reg_a);
                 self.set_hl(self.get_hl()+1);
                 mcycles = 2;
             },
 
             0x01 => {
-                let z:u16 = Self::read_mem(self.pc as usize) as u16;
+                let z:u16 = self.bus.read(self.pc as usize) as u16;
                 self.pc += 1;
-                let z2:u16 = Self::read_mem(self.pc as usize) as u16;
+                let z2:u16 = self.bus.read(self.pc as usize) as u16;
                 self.pc += 1;
                 self.set_bc(z|(z2<<8));
                 mcycles = 3;
             },
             0x11 => {
-                let z:u16 = Self::read_mem(self.pc as usize) as u16;
+                let z:u16 = self.bus.read(self.pc as usize) as u16;
                 self.pc += 1;
-                let z2:u16 = Self::read_mem(self.pc as usize) as u16;
+                let z2:u16 = self.bus.read(self.pc as usize) as u16;
                 self.pc += 1;
                 self.set_de(z|z2<<8);
                 mcycles = 3;
             },
             0x21 => {
-                let z:u16 = Self::read_mem(self.pc as usize) as u16;
+                let z:u16 = self.bus.read(self.pc as usize) as u16;
                 self.pc += 1;
-                let z2:u16 = Self::read_mem(self.pc as usize) as u16;
+                let z2:u16 = self.bus.read(self.pc as usize) as u16;
                 self.pc += 1;
                 self.set_hl(z|z2<<8);
                 mcycles = 3;
             },
 
             0x08 => {
-                let z:u16 = Self::read_mem(self.pc as usize) as u16;
+                let z:u16 = self.bus.read(self.pc as usize) as u16;
                 self.pc += 1;
-                let z2:u16 = Self::read_mem(self.pc as usize) as u16;
+                let z2:u16 = self.bus.read(self.pc as usize) as u16;
                 self.pc += 1;
-                Self::write_mem((z|z2<<8) as usize, (self.sp&0xff) as u8);
-                Self::write_mem((z|z2<<8) as usize+1, (self.sp>>8) as u8);
+                self.bus.write((z|z2<<8) as usize, (self.sp&0xff) as u8);
+                self.bus.write((z|z2<<8) as usize+1, (self.sp>>8) as u8);
                 mcycles = 5;
             },
             0xF9 => {
