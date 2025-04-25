@@ -179,6 +179,56 @@ impl CPU{
         self.reg_a = result;
     }
 
+    fn compare(&mut self, val:u8){
+        let result = self.reg_a.wrapping_sub(val);
+        self.set_zero(result == 0);
+        self.set_neg(true);
+        self.set_halfcarry((self.reg_a&0x0F) < (val&0x0F));
+        self.set_carry((self.reg_a as u16) < (val as u16));
+    }
+
+    fn increment(&mut self, val:u8) -> u8{
+        let result = val.wrapping_add(1);
+        self.set_zero(result == 0);
+        self.set_neg(false);
+        self.set_halfcarry((val&0x0F) + 1 > 0x0F);
+        return result
+    }
+    fn decrement(&mut self, val:u8) -> u8{
+        let result = val.wrapping_sub(1);
+        self.set_zero(result == 0);
+        self.set_neg(true);
+        self.set_halfcarry((val&0x0F) < 1);
+        return result
+    }
+
+    fn and(&mut self, val:u8){
+        let result = self.reg_a & val;
+        self.set_zero(result == 0);
+        self.set_neg(true);
+        self.set_halfcarry(true);
+        self.set_carry(false);
+        self.reg_a = result;
+    }
+
+    fn or(&mut self, val:u8){
+        let result = self.reg_a | val;
+        self.set_zero(result == 0);
+        self.set_neg(false);
+        self.set_halfcarry(false);
+        self.set_carry(false);
+        self.reg_a = result;
+    }
+
+    fn xor(&mut self, val:u8){
+        let result = self.reg_a ^ val;
+        self.set_zero(result == 0);
+        self.set_neg(false);
+        self.set_halfcarry(false);
+        self.set_carry(false);
+        self.reg_a = result;
+    }
+
     pub fn run_opcode(&mut self,op:u8) -> u8{
         let mut mcycles = 0;
         match op{
@@ -684,6 +734,231 @@ impl CPU{
                 let z:u8 = self.bus.read(self.pc as usize);
                 self.pc += 1;
                 self.sub_carry(z);
+                mcycles = 2;
+            },
+
+            0xB8 => {
+                self.compare(self.reg_b);
+                mcycles = 1;
+            },
+            0xB9 => {
+                self.compare(self.reg_c);
+                mcycles = 1;
+            },
+            0xBA => {
+                self.compare(self.reg_d);
+                mcycles = 1;
+            },
+            0xBB => {
+                self.compare(self.reg_e);
+                mcycles = 1;
+            },
+            0xBC => {
+                self.compare(self.reg_h);
+                mcycles = 1;
+            },
+            0xBD => {
+                self.compare(self.reg_l);
+                mcycles = 1;
+            },
+            0xBF => {
+                self.compare(self.reg_a);
+                mcycles = 1;
+            },
+            0xBE => {
+                self.compare(self.bus.read(self.get_hl() as usize));
+                mcycles = 2;
+            },
+            0xFE => {
+                let z:u8 = self.bus.read(self.pc as usize);
+                self.pc += 1;
+                self.compare(z);
+                mcycles = 2;
+            },
+
+            0x04 => {
+                self.reg_b = self.increment(self.reg_b);
+                mcycles = 1;
+            },
+            0x0C => {
+                self.reg_c = self.increment(self.reg_c);
+                mcycles = 1;
+            },
+            0x14 => {
+                self.reg_d = self.increment(self.reg_d);
+                mcycles = 1;
+            },
+            0x1C => {
+                self.reg_e = self.increment(self.reg_e);
+                mcycles = 1;
+            },
+            0x24 => {
+                self.reg_h = self.increment(self.reg_h);
+                mcycles = 1;
+            },
+            0x2C => {
+                self.reg_l = self.increment(self.reg_l);
+                mcycles = 1;
+            },
+            0x3C => {
+                self.reg_a = self.increment(self.reg_a);
+                mcycles = 1;
+            },
+            0x34 => {
+                let z = self.bus.read(self.get_hl() as usize);
+                let result = self.increment(z);
+                self.bus.write(self.get_hl() as usize, result);
+                mcycles = 3;
+            },
+            0x05 => {
+                self.reg_b = self.decrement(self.reg_b);
+                mcycles = 1;
+            },
+            0x0D => {
+                self.reg_c = self.decrement(self.reg_c);
+                mcycles = 1;
+            },
+            0x15 => {
+                self.reg_d = self.decrement(self.reg_d);
+                mcycles = 1;
+            },
+            0x1D => {
+                self.reg_e = self.decrement(self.reg_e);
+                mcycles = 1;
+            },
+            0x25 => {
+                self.reg_h = self.decrement(self.reg_h);
+                mcycles = 1;
+            },
+            0x2D => {
+                self.reg_l = self.decrement(self.reg_l);
+                mcycles = 1;
+            },
+            0x3D => {
+                self.reg_a = self.decrement(self.reg_a);
+                mcycles = 1;
+            },
+            0x35 => {
+                let z = self.bus.read(self.get_hl() as usize);
+                let result = self.decrement(z);
+                self.bus.write(self.get_hl() as usize, result);
+                mcycles = 3;
+            },
+
+            0xA0 => {
+                self.and(self.reg_b);
+                mcycles = 1;
+            },
+            0xA1 => {
+                self.and(self.reg_c);
+                mcycles = 1;
+            },
+            0xA2 => {
+                self.and(self.reg_d);
+                mcycles = 1;
+            },
+            0xA3 => {
+                self.and(self.reg_e);
+                mcycles = 1;
+            },
+            0xA4 => {
+                self.and(self.reg_h);
+                mcycles = 1;
+            },
+            0xA5 => {
+                self.and(self.reg_l);
+                mcycles = 1;
+            },
+            0xA7 => {
+                self.and(self.reg_a);
+                mcycles = 1;
+            },
+            0xA6 => {
+                self.and(self.bus.read(self.get_hl() as usize));
+                mcycles = 2;
+            },
+            0xE6 => {
+                let z:u8 = self.bus.read(self.pc as usize);
+                self.pc += 1;
+                self.and(z);
+                mcycles = 2;
+            },
+
+            0xB0 => {
+                self.or(self.reg_b);
+                mcycles = 1;
+            },
+            0xB1 => {
+                self.or(self.reg_c);
+                mcycles = 1;
+            },
+            0xB2 => {
+                self.or(self.reg_d);
+                mcycles = 1;
+            },
+            0xB3 => {
+                self.or(self.reg_e);
+                mcycles = 1;
+            },
+            0xB4 => {
+                self.or(self.reg_h);
+                mcycles = 1;
+            },
+            0xB5 => {
+                self.or(self.reg_l);
+                mcycles = 1;
+            },
+            0xB7 => {
+                self.or(self.reg_a);
+                mcycles = 1;
+            },
+            0xB6 => {
+                self.or(self.bus.read(self.get_hl() as usize));
+                mcycles = 2;
+            },
+            0xF6 => {
+                let z:u8 = self.bus.read(self.pc as usize);
+                self.pc += 1;
+                self.or(z);
+                mcycles = 2;
+            },
+
+            0xA8 => {
+                self.xor(self.reg_b);
+                mcycles = 1;
+            },
+            0xA9 => {
+                self.xor(self.reg_c);
+                mcycles = 1;
+            },
+            0xAA => {
+                self.xor(self.reg_d);
+                mcycles = 1;
+            },
+            0xAB => {
+                self.xor(self.reg_e);
+                mcycles = 1;
+            },
+            0xAC => {
+                self.xor(self.reg_h);
+                mcycles = 1;
+            },
+            0xAD => {
+                self.xor(self.reg_l);
+                mcycles = 1;
+            },
+            0xAF => {
+                self.xor(self.reg_a);
+                mcycles = 1;
+            },
+            0xAE => {
+                self.xor(self.bus.read(self.get_hl() as usize));
+                mcycles = 2;
+            },
+            0xEE => {
+                let z:u8 = self.bus.read(self.pc as usize);
+                self.pc += 1;
+                self.xor(z);
                 mcycles = 2;
             },
             _ => ()
