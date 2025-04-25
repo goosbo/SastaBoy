@@ -141,6 +141,44 @@ impl CPU{
         return val
     }
 
+    fn add(&mut self, val:u8){
+        let result = self.reg_a.wrapping_add(val);
+        self.set_zero(result == 0);
+        self.set_neg(false);
+        self.set_halfcarry((self.reg_a&0x0F) + (val&0x0F) > 0x0F);
+        self.set_carry((self.reg_a as u16&0xFF) + (val as u16&0xFF) > 0xFF);
+        self.reg_a = result;
+    }
+
+    fn add_carry(&mut self, val:u8){
+        let carry = self.get_carry() as u8;
+        let result = self.reg_a.wrapping_add(val).wrapping_add(carry);
+        self.set_zero(result == 0);
+        self.set_neg(false);
+        self.set_halfcarry((self.reg_a&0x0F) + (val&0x0F) + carry> 0x0F);
+        self.set_carry((self.reg_a as u16&0xFF) + (val as u16&0xFF) + carry as u16 > 0xFF);
+        self.reg_a = result;
+    }
+
+    fn sub(&mut self, val:u8){
+        let result = self.reg_a.wrapping_sub(val);
+        self.set_zero(result == 0);
+        self.set_neg(true);
+        self.set_halfcarry((self.reg_a&0x0F) < (val&0x0F));
+        self.set_carry((self.reg_a as u16) < (val as u16));
+        self.reg_a = result;
+    }
+
+    fn sub_carry(&mut self, val:u8){
+        let carry = self.get_carry() as u8;
+        let result = self.reg_a.wrapping_sub(val).wrapping_sub(carry);
+        self.set_zero(result == 0);
+        self.set_neg(true);
+        self.set_halfcarry((self.reg_a&0x0F) < (val&0x0F) + carry);
+        self.set_carry((self.reg_a as u16) < (val as u16) + carry as u16);
+        self.reg_a = result;
+    }
+
     pub fn run_opcode(&mut self,op:u8) -> u8{
         let mut mcycles = 0;
         match op{
@@ -488,182 +526,164 @@ impl CPU{
             },
 
             0x80 => {
-                let result = self.reg_a.wrapping_add(self.reg_b);
-                self.set_zero(result == 0);
-                self.set_neg(false);
-                self.set_halfcarry((self.reg_a&0x0F) + (self.reg_b&0x0F) > 0x0F);
-                self.set_carry((self.reg_a as u16&0xFF) + (self.reg_b as u16&0xFF) > 0xFF);
-                self.reg_a = result;
+                self.add(self.reg_b);
                 mcycles = 1;
             },
             0x81 => {
-                let result = self.reg_a.wrapping_add(self.reg_c);
-                self.set_zero(result == 0);
-                self.set_neg(false);
-                self.set_halfcarry((self.reg_a&0x0F) + (self.reg_c&0x0F) > 0x0F);
-                self.set_carry((self.reg_a as u16&0xFF) + (self.reg_c as u16&0xFF) > 0xFF);
-                self.reg_a = result;
+                self.add(self.reg_c);
                 mcycles = 1;
             },
             0x82 => {
-                let result = self.reg_a.wrapping_add(self.reg_d);
-                self.set_zero(result == 0);
-                self.set_neg(false);
-                self.set_halfcarry((self.reg_a&0x0F) + (self.reg_d&0x0F) > 0x0F);
-                self.set_carry((self.reg_a as u16&0xFF) + (self.reg_d as u16&0xFF) > 0xFF);
-                self.reg_a = result;
+                self.add(self.reg_d);
                 mcycles = 1;
             },
             0x83 => {
-                let result = self.reg_a.wrapping_add(self.reg_e);
-                self.set_zero(result == 0);
-                self.set_neg(false);
-                self.set_halfcarry((self.reg_a&0x0F) + (self.reg_e&0x0F) > 0x0F);
-                self.set_carry((self.reg_a as u16&0xFF) + (self.reg_e as u16&0xFF) > 0xFF);
-                self.reg_a = result;
+                self.add(self.reg_e);
                 mcycles = 1;
             },
             0x84 => {
-                let result = self.reg_a.wrapping_add(self.reg_h);
-                self.set_zero(result == 0);
-                self.set_neg(false);
-                self.set_halfcarry((self.reg_a&0x0F) + (self.reg_h&0x0F) > 0x0F);
-                self.set_carry((self.reg_a as u16&0xFF) + (self.reg_h as u16&0xFF) > 0xFF);
-                self.reg_a = result;
+                self.add(self.reg_h);
                 mcycles = 1;
             },
             0x85 => {
-                let result = self.reg_a.wrapping_add(self.reg_l);
-                self.set_zero(result == 0);
-                self.set_neg(false);
-                self.set_halfcarry((self.reg_a&0x0F) + (self.reg_l&0x0F) > 0x0F);
-                self.set_carry((self.reg_a as u16&0xFF) + (self.reg_l as u16&0xFF) > 0xFF);
-                self.reg_a = result;
+                self.add(self.reg_l);
                 mcycles = 1;
             },
             0x87 => {
-                let result = self.reg_a.wrapping_add(self.reg_a);
-                self.set_zero(result == 0);
-                self.set_neg(false);
-                self.set_halfcarry((self.reg_a&0x0F) + (self.reg_a&0x0F) > 0x0F);
-                self.set_carry((self.reg_a as u16&0xFF) + (self.reg_a as u16&0xFF) > 0xFF);
-                self.reg_a = result;
+                self.add(self.reg_a);
                 mcycles = 1;
             },
             0x86 => {
-                let result = self.reg_a.wrapping_add(self.bus.read(self.get_hl() as usize));
-                self.set_zero(result == 0);
-                self.set_neg(false);
-                self.set_halfcarry((self.reg_a&0x0F) + (self.bus.read(self.get_hl() as usize)&0x0F) > 0x0F);
-                self.set_carry((self.reg_a as u16&0xFF) + (self.bus.read(self.get_hl() as usize) as u16&0xFF) > 0xFF);
-                self.reg_a = result;
+                self.add(self.bus.read(self.get_hl() as usize));
                 mcycles = 2;
             },
 
             0xC6 => {
                 let z:u8 = self.bus.read(self.pc as usize);
                 self.pc += 1;
-                let result = self.reg_a.wrapping_add(z);
-                self.set_zero(result == 0);
-                self.set_neg(false);
-                self.set_halfcarry((self.reg_a&0x0F) + (z&0x0F) > 0x0F);
-                self.set_carry((self.reg_a as u16&0xFF) + (z as u16&0xFF) > 0xFF);
-                self.reg_a = result;
+                self.add(z);
                 mcycles = 2;
             },
 
             0x88 => {
-                let carry = self.get_carry() as u8;
-                let result = self.reg_a.wrapping_add(self.reg_b).wrapping_add(carry);
-                self.set_zero(result == 0);
-                self.set_neg(false);
-                self.set_halfcarry((self.reg_a&0x0F) + (self.reg_b&0x0F) + carry> 0x0F);
-                self.set_carry((self.reg_a as u16&0xFF) + (self.reg_b as u16&0xFF) + carry as u16 > 0xFF);
-                self.reg_a = result;
+                self.add_carry(self.reg_b);
                 mcycles = 1;
             },
             0x89 => {
-                let carry = self.get_carry() as u8;
-                let result = self.reg_a.wrapping_add(self.reg_c).wrapping_add(carry);
-                self.set_zero(result == 0);
-                self.set_neg(false);
-                self.set_halfcarry((self.reg_a&0x0F) + (self.reg_c&0x0F) + carry> 0x0F);
-                self.set_carry((self.reg_a as u16&0xFF) + (self.reg_c as u16&0xFF) + carry as u16 > 0xFF);
-                self.reg_a = result;
+                self.add_carry(self.reg_c);
                 mcycles = 1;
             },
             0x8A => {
-                let carry = self.get_carry() as u8;
-                let result = self.reg_a.wrapping_add(self.reg_d).wrapping_add(carry);
-                self.set_zero(result == 0);
-                self.set_neg(false);
-                self.set_halfcarry((self.reg_a&0x0F) + (self.reg_d&0x0F) + carry> 0x0F);
-                self.set_carry((self.reg_a as u16&0xFF) + (self.reg_d as u16&0xFF) + carry as u16 > 0xFF);
-                self.reg_a = result;
+                self.add_carry(self.reg_d);
                 mcycles = 1;
             },
             0x8B => {
-                let carry = self.get_carry() as u8;
-                let result = self.reg_a.wrapping_add(self.reg_e).wrapping_add(carry);
-                self.set_zero(result == 0);
-                self.set_neg(false);
-                self.set_halfcarry((self.reg_a&0x0F) + (self.reg_e&0x0F) + carry> 0x0F);
-                self.set_carry((self.reg_a as u16&0xFF) + (self.reg_e as u16&0xFF) + carry as u16 > 0xFF);
-                self.reg_a = result;
+                self.add_carry(self.reg_e);
                 mcycles = 1;
             },
             0x8C => {
-                let carry = self.get_carry() as u8;
-                let result = self.reg_a.wrapping_add(self.reg_h).wrapping_add(carry);
-                self.set_zero(result == 0);
-                self.set_neg(false);
-                self.set_halfcarry((self.reg_a&0x0F) + (self.reg_h&0x0F) + carry> 0x0F);
-                self.set_carry((self.reg_a as u16&0xFF) + (self.reg_h as u16&0xFF) + carry as u16 > 0xFF);
-                self.reg_a = result;
+                self.add_carry(self.reg_h);
                 mcycles = 1;
             },
             0x8D => {
-                let carry = self.get_carry() as u8;
-                let result = self.reg_a.wrapping_add(self.reg_l).wrapping_add(carry);
-                self.set_zero(result == 0);
-                self.set_neg(false);
-                self.set_halfcarry((self.reg_a&0x0F) + (self.reg_l&0x0F) + carry> 0x0F);
-                self.set_carry((self.reg_a as u16&0xFF) + (self.reg_l as u16&0xFF) + carry as u16 > 0xFF);
-                self.reg_a = result;
+                self.add_carry(self.reg_l);
                 mcycles = 1;
             },
             0x8F => {
-                let carry = self.get_carry() as u8;
-                let result = self.reg_a.wrapping_add(self.reg_a).wrapping_add(carry);
-                self.set_zero(result == 0);
-                self.set_neg(false);
-                self.set_halfcarry((self.reg_a&0x0F) + (self.reg_a&0x0F) + carry> 0x0F);
-                self.set_carry((self.reg_a as u16&0xFF) + (self.reg_a as u16&0xFF) + carry as u16 > 0xFF);
-                self.reg_a = result;
+                self.add_carry(self.reg_a);
                 mcycles = 1;
             },
 
             0x8E => {
-                let carry = self.get_carry() as u8;
-                let result = self.reg_a.wrapping_add(self.bus.read(self.get_hl() as usize)).wrapping_add(carry);
-                self.set_zero(result == 0);
-                self.set_neg(false);
-                self.set_halfcarry((self.reg_a&0x0F) + (self.bus.read(self.get_hl() as usize)&0x0F) + carry> 0x0F);
-                self.set_carry((self.reg_a as u16&0xFF) + (self.bus.read(self.get_hl() as usize) as u16&0xFF) + carry as u16 > 0xFF);
-                self.reg_a = result;
+                self.add_carry(self.bus.read(self.get_hl() as usize));
                 mcycles = 2;
             },
 
             0xCE => {
                 let z:u8 = self.bus.read(self.pc as usize);
                 self.pc += 1;
-                let carry = self.get_carry() as u8;
-                let result = self.reg_a.wrapping_add(z).wrapping_add(carry);
-                self.set_zero(result == 0);
-                self.set_neg(false);
-                self.set_halfcarry((self.reg_a&0x0F) + (z&0x0F) + carry> 0x0F);
-                self.set_carry((self.reg_a as u16&0xFF) + (z as u16&0xFF) + carry as u16 > 0xFF);
-                self.reg_a = result;
+                self.add_carry(z);
+                mcycles = 2;
+            },
+
+            0x90 => {
+                self.sub(self.reg_b);
+                mcycles = 1;
+            },
+            0x91 => {
+                self.sub(self.reg_c);
+                mcycles = 1;
+            },
+            0x92 => {
+                self.sub(self.reg_d);
+                mcycles = 1;
+            },
+            0x93 => {
+                self.sub(self.reg_e);
+                mcycles = 1;
+            },
+            0x94 => {
+                self.sub(self.reg_h);
+                mcycles = 1;
+            },
+            0x95 => {
+                self.sub(self.reg_l);
+                mcycles = 1;
+            },
+            0x97 => {
+                self.sub(self.reg_a);
+                mcycles = 1;
+            },
+
+            0x96 => {
+                self.sub(self.bus.read(self.get_hl() as usize));
+                mcycles = 2;
+            },
+
+            0xD6 => {
+                let z:u8 = self.bus.read(self.pc as usize);
+                self.pc += 1;
+                self.sub(z);
+                mcycles = 2;
+            },
+
+            0x98 => {
+                self.sub_carry(self.reg_b);
+                mcycles = 1;
+            },
+            0x99 => {
+                self.sub_carry(self.reg_c);
+                mcycles = 1;
+            },
+            0x9A => {
+                self.sub_carry(self.reg_d);
+                mcycles = 1;
+            },
+            0x9B => {
+                self.sub_carry(self.reg_e);
+                mcycles = 1;
+            },
+            0x9C => {
+                self.sub_carry(self.reg_h);
+                mcycles = 1;
+            },
+            0x9D => {
+                self.sub_carry(self.reg_l);
+                mcycles = 1;
+            },
+            0x9F => {
+                self.sub_carry(self.reg_a);
+                mcycles = 1;
+            },
+
+            0x9E => {
+                self.sub_carry(self.bus.read(self.get_hl() as usize));
+                mcycles = 2;
+            },
+            0xDE => {
+                let z:u8 = self.bus.read(self.pc as usize);
+                self.pc += 1;
+                self.sub_carry(z);
                 mcycles = 2;
             },
             _ => ()
