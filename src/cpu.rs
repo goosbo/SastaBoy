@@ -229,6 +229,102 @@ impl CPU{
         self.reg_a = result;
     }
 
+    fn add16(&mut self, val:u16){
+        let result = self.get_hl().wrapping_add(val);
+        self.set_neg(false);
+        self.set_halfcarry((self.get_hl()&0x0FFF) + (val&0x0FFF) > 0x0FFF);
+        self.set_carry((self.get_hl() as u32) + (val as u32) > 0xFFFF);
+        self.set_hl(result);
+    }
+
+    fn rotate_left(&mut self, val:u8) -> u8{
+        let new_carry = val >> 7;
+        let carry = self.get_carry() as u8;
+        let result = (val << 1) | carry;
+        self.set_carry(new_carry != 0);
+        self.set_neg(false);
+        self.set_halfcarry(false);
+        return result
+    }
+    fn rotate_right(&mut self, val:u8) -> u8{
+        let new_carry = val & 1;
+        let carry = self.get_carry() as u8;
+        let result = (val >> 1) | (carry << 7);
+        self.set_carry(new_carry != 0);
+        self.set_neg(false);
+        self.set_halfcarry(false);
+        return result
+    }
+    fn rotate_left_carry(&mut self, val:u8) -> u8{
+        let carry = val >> 7;
+        let result = (val << 1) | carry;
+        self.set_carry(carry != 0);
+        self.set_neg(false);
+        self.set_halfcarry(false);
+        return result
+    }
+    fn rotate_right_carry(&mut self, val:u8) -> u8{
+        let carry = val & 1;
+        let result = (val >> 1) | (carry << 7);
+        self.set_carry(carry != 0);
+        self.set_neg(false);
+        self.set_halfcarry(false);
+        return result
+    }
+
+    fn sla(&mut self, val:u8) -> u8{
+        let result = val << 1;
+        self.set_carry((val >>7) != 0);
+        self.set_zero(result == 0);
+        self.set_neg(false);
+        self.set_halfcarry(false);
+        return result
+    }
+
+    fn sra(&mut self, val:u8) -> u8{
+        let result = (val as i8) >> 1;
+        self.set_carry((val & 1) != 0);
+        self.set_zero(result == 0);
+        self.set_neg(false);
+        self.set_halfcarry(false);
+        return result as u8
+    }
+
+    fn swap(&mut self, val:u8) -> u8{
+        let result = ((val & 0x0F) << 4) | (val >> 4);
+        self.set_zero(result == 0);
+        self.set_neg(false);
+        self.set_halfcarry(false);
+        self.set_carry(false);
+        return result
+    }
+
+    fn srl(&mut self, val:u8) -> u8{
+        let result = val >> 1;
+        self.set_carry((val & 1) != 0);
+        self.set_zero(result == 0);
+        self.set_neg(false);
+        self.set_halfcarry(false);
+        return result
+    }
+
+    fn bit(&mut self, val:u8, bit:u8){
+        let result = (val>>bit) & 1;
+        self.set_zero(result == 0);
+        self.set_neg(false);
+        self.set_halfcarry(true);
+    }
+
+    fn res(&mut self, val:u8, bit:u8) -> u8{
+        let result = val & !(1<<bit);
+        return result
+    }
+
+    fn set(&mut self, val:u8, bit:u8) -> u8{
+        let result = val | (1<<bit);
+        return result
+    }
+    
     pub fn run_opcode(&mut self,op:u8) -> u8{
         let mut mcycles = 0;
         match op{
@@ -961,6 +1057,1255 @@ impl CPU{
                 self.xor(z);
                 mcycles = 2;
             },
+
+            0x3F => {
+                self.set_neg(false);
+                self.set_halfcarry(false);
+                self.set_carry(!self.get_carry());
+                mcycles = 1;
+            }
+            0x37 => {
+                self.set_neg(false);
+                self.set_halfcarry(false);
+                self.set_carry(true);
+                mcycles = 1;
+            },
+
+            0x27 =>{
+                let mut offset:u8 = 0;
+                let mut carry = false;
+                if (!self.get_neg() && self.reg_a & 0x0F > 0x09) || self.get_halfcarry() {
+                    offset |= 0x06;
+                } 
+                if(!self.get_neg() && self.reg_a > 0x99) || self.get_carry() {
+                    offset |= 0x60;
+                    carry = true;
+                }
+
+                if self.get_neg() {
+                    self.reg_a = self.reg_a.wrapping_sub(offset);
+                } else {
+                    self.reg_a = self.reg_a.wrapping_add(offset);
+                }
+                self.set_zero(self.reg_a == 0);
+                self.set_halfcarry(false);
+                self.set_carry(carry);
+                mcycles = 1;
+
+            },
+
+            0x2F => {
+                self.reg_a = !self.reg_a;
+                self.set_neg(true);
+                self.set_halfcarry(false);
+                mcycles = 1;
+            },
+
+            0x03 =>{
+                self.set_bc(self.get_bc()+1);
+                mcycles = 2; 
+            },
+            0x13 =>{
+                self.set_de(self.get_de()+1);
+                mcycles = 2; 
+            },
+            0x23 =>{
+                self.set_hl(self.get_hl()+1);
+                mcycles = 2; 
+            },
+
+            0x0B =>{
+                self.set_bc(self.get_bc()-1);
+                mcycles = 2; 
+            },
+            0x1B =>{
+                self.set_de(self.get_de()-1);
+                mcycles = 2; 
+            },
+            0x2B =>{
+                self.set_hl(self.get_hl()-1);
+                mcycles = 2; 
+            },
+
+            0x09 => {
+                self.add16(self.get_bc());
+                mcycles = 2;
+            },
+            0x19 => {
+                self.add16(self.get_de());
+                mcycles = 2;
+            },
+            0x29 => {
+                self.add16(self.get_hl());
+                mcycles = 2;
+            },
+
+            0xE8 => {
+                let z:i8 = self.bus.read(self.pc as usize) as i8;
+                self.pc += 1;
+                let result = self.get_hl().wrapping_add(z as u16);
+                self.set_hl(result);
+                self.set_zero(false);
+                self.set_neg(false);
+                self.set_halfcarry((self.get_hl()&0x0F) + (z as u16&0x0F) > 0x0F);
+                self.set_carry((self.get_hl()&0xFF) + (z as u16&0xFF) > 0xFF);
+                mcycles = 4;
+            },
+
+            0x07 => {
+                self.reg_a = self.rotate_left_carry(self.reg_a);
+                self.set_zero(false);
+                mcycles = 1;
+            },
+
+            0x0F => {
+                self.reg_a = self.rotate_right_carry(self.reg_a);
+                self.set_zero(false);
+                mcycles = 1;
+            },
+
+            0x17 => {
+                self.reg_a = self.rotate_left(self.reg_a);
+                self.set_zero(false);
+                mcycles = 1;
+            },
+
+            0x1F => {
+                self.reg_a = self.rotate_right(self.reg_a);
+                self.set_zero(false);
+                mcycles = 1;
+            },
+            
+            0xCB => {
+                let op2:u8 = self.bus.read(self.pc as usize);
+                self.pc += 1;
+                match op2{
+                    0x00 => {
+                        self.reg_b = self.rotate_left_carry(self.reg_b);
+                        self.set_zero(self.reg_b == 0);
+                        mcycles = 2;
+                    },
+                    0x01 => {
+                        self.reg_c = self.rotate_left_carry(self.reg_c);
+                        self.set_zero(self.reg_c == 0);
+                        mcycles = 2;
+                    },
+                    0x02 => {
+                        self.reg_d = self.rotate_left_carry(self.reg_d);
+                        self.set_zero(self.reg_d == 0);
+                        mcycles = 2;
+                    },
+                    0x03 => {
+                        self.reg_e = self.rotate_left_carry(self.reg_e);
+                        self.set_zero(self.reg_e == 0);
+                        mcycles = 2;
+                    },
+                    0x04 => {
+                        self.reg_h = self.rotate_left_carry(self.reg_h);
+                        self.set_zero(self.reg_h == 0);
+                        mcycles = 2;
+                    },
+                    0x05 => {
+                        self.reg_l = self.rotate_left_carry(self.reg_l);
+                        self.set_zero(self.reg_l == 0);
+                        mcycles = 2;
+                    },
+                    0x07 => {
+                        self.reg_a = self.rotate_left_carry(self.reg_a);
+                        self.set_zero(self.reg_a == 0);
+                        mcycles = 2;
+                    },
+
+                    0x06 => {
+                        let z = self.bus.read(self.get_hl() as usize);
+                        let result = self.rotate_left_carry(z);
+                        self.bus.write(self.get_hl() as usize, result);
+                        self.set_zero(result == 0);
+                        mcycles = 4;
+                    },
+
+                    0x08 => {
+                        self.reg_b = self.rotate_right_carry(self.reg_b);
+                        self.set_zero(self.reg_b == 0);
+                        mcycles = 2;
+                    },
+                    0x09 => {
+                        self.reg_c = self.rotate_right_carry(self.reg_c);
+                        self.set_zero(self.reg_c == 0);
+                        mcycles = 2;
+                    },
+                    0x0A => {
+                        self.reg_d = self.rotate_right_carry(self.reg_d);
+                        self.set_zero(self.reg_d == 0);
+                        mcycles = 2;
+                    },
+                    0x0B => {
+                        self.reg_e = self.rotate_right_carry(self.reg_e);
+                        self.set_zero(self.reg_e == 0);
+                        mcycles = 2;
+                    },
+                    0x0C => {
+                        self.reg_h = self.rotate_right_carry(self.reg_h);
+                        self.set_zero(self.reg_h == 0);
+                        mcycles = 2;
+                    },
+                    0x0D => {
+                        self.reg_l = self.rotate_right_carry(self.reg_l);
+                        self.set_zero(self.reg_l == 0);
+                        mcycles = 2;
+                    },
+                    0x0F => {
+                        self.reg_a = self.rotate_right_carry(self.reg_a);
+                        self.set_zero(self.reg_a == 0);
+                        mcycles = 2;
+                    },
+                    0x0E => {
+                        let z = self.bus.read(self.get_hl() as usize);
+                        let result = self.rotate_right_carry(z);
+                        self.bus.write(self.get_hl() as usize, result);
+                        self.set_zero(result == 0);
+                        mcycles = 4;
+                    },
+                    0x10 => {
+                        self.reg_b = self.rotate_left(self.reg_b);
+                        self.set_zero(self.reg_b == 0);
+                        mcycles = 2;
+                    },
+                    0x11 => {
+                        self.reg_c = self.rotate_left(self.reg_c);
+                        self.set_zero(self.reg_c == 0);
+                        mcycles = 2;
+                    },
+                    0x12 => {
+                        self.reg_d = self.rotate_left(self.reg_d);
+                        self.set_zero(self.reg_d == 0);
+                        mcycles = 2;
+                    },
+                    0x13 => {
+                        self.reg_e = self.rotate_left(self.reg_e);
+                        self.set_zero(self.reg_e == 0);
+                        mcycles = 2;
+                    },
+                    0x14 => {
+                        self.reg_h = self.rotate_left(self.reg_h);
+                        self.set_zero(self.reg_h == 0);
+                        mcycles = 2;
+                    },
+                    0x15 => {
+                        self.reg_l = self.rotate_left(self.reg_l);
+                        self.set_zero(self.reg_l == 0);
+                        mcycles = 2;
+                    },
+                    0x17 => {
+                        self.reg_a = self.rotate_left(self.reg_a);
+                        self.set_zero(self.reg_a == 0);
+                        mcycles = 2;
+                    },
+                    0x16 => {
+                        let z = self.bus.read(self.get_hl() as usize);
+                        let result = self.rotate_left(z);
+                        self.bus.write(self.get_hl() as usize, result);
+                        self.set_zero(result == 0);
+                        mcycles = 4;
+                    },
+                    0x18 => {
+                        self.reg_b = self.rotate_right(self.reg_b);
+                        self.set_zero(self.reg_b == 0);
+                        mcycles = 2;
+                    },
+                    0x19 => {
+                        self.reg_c = self.rotate_right(self.reg_c);
+                        self.set_zero(self.reg_c == 0);
+                        mcycles = 2;
+                    },
+                    0x1A => {
+                        self.reg_d = self.rotate_right(self.reg_d);
+                        self.set_zero(self.reg_d == 0);
+                        mcycles = 2;
+                    },
+                    0x1B => {
+                        self.reg_e = self.rotate_right(self.reg_e);
+                        self.set_zero(self.reg_e == 0);
+                        mcycles = 2;
+                    },
+                    0x1C => {
+                        self.reg_h = self.rotate_right(self.reg_h);
+                        self.set_zero(self.reg_h == 0);
+                        mcycles = 2;
+                    },
+                    0x1D => {
+                        self.reg_l = self.rotate_right(self.reg_l);
+                        self.set_zero(self.reg_l == 0);
+                        mcycles = 2;
+                    },
+                    0x1F => {
+                        self.reg_a = self.rotate_right(self.reg_a);
+                        self.set_zero(self.reg_a == 0);
+                        mcycles = 2;
+                    },
+                    0x1E => {
+                        let z = self.bus.read(self.get_hl() as usize);
+                        let result = self.rotate_right(z);
+                        self.bus.write(self.get_hl() as usize, result);
+                        self.set_zero(result == 0);
+                        mcycles = 4;
+                    },
+
+                    0x20 => {
+                        self.reg_b = self.sla(self.reg_b);
+                        mcycles = 2;
+                    },
+                    0x21 => {
+                        self.reg_c = self.sla(self.reg_c);
+                        mcycles = 2;
+                    },
+                    0x22 => {
+                        self.reg_d = self.sla(self.reg_d);
+                        mcycles = 2;
+                    },
+                    0x23 => {
+                        self.reg_e = self.sla(self.reg_e);
+                        mcycles = 2;
+                    },
+                    0x24 => {
+                        self.reg_h = self.sla(self.reg_h);
+                        mcycles = 2;
+                    },
+                    0x25 => {
+                        self.reg_l = self.sla(self.reg_l);
+                        mcycles = 2;
+                    },
+                    0x27 => {
+                        self.reg_a = self.sla(self.reg_a);
+                        mcycles = 2;
+                    },
+                    0x26 => {
+                        let z = self.bus.read(self.get_hl() as usize);
+                        let result = self.sla(z);
+                        self.bus.write(self.get_hl() as usize, result);
+                        mcycles = 4;
+                    },
+
+                    0x28 => {
+                        self.reg_b = self.sra(self.reg_b);
+                        mcycles = 2;
+                    },
+                    0x29 => {
+                        self.reg_c = self.sra(self.reg_c);
+                        mcycles = 2;
+                    },
+                    0x2A => {
+                        self.reg_d = self.sra(self.reg_d);
+                        mcycles = 2;
+                    },
+                    0x2B => {
+                        self.reg_e = self.sra(self.reg_e);
+                        mcycles = 2;
+                    },
+                    0x2C => {
+                        self.reg_h = self.sra(self.reg_h);
+                        mcycles = 2;
+                    },
+                    0x2D => {
+                        self.reg_l = self.sra(self.reg_l);
+                        mcycles = 2;
+                    },
+                    0x2F => {
+                        self.reg_a = self.sra(self.reg_a);
+                        mcycles = 2;
+                    },
+                    0x2E => {
+                        let z = self.bus.read(self.get_hl() as usize);
+                        let result = self.sra(z);
+                        self.bus.write(self.get_hl() as usize, result);
+                        mcycles = 4;
+                    },
+
+                    0x30 => {
+                        self.reg_b = self.swap(self.reg_b);
+                        mcycles = 2;
+                    },
+                    0x31 => {
+                        self.reg_c = self.swap(self.reg_c);
+                        mcycles = 2;
+                    },
+                    0x32 => {
+                        self.reg_d = self.swap(self.reg_d);
+                        mcycles = 2;
+                    },
+                    0x33 => {
+                        self.reg_e = self.swap(self.reg_e);
+                        mcycles = 2;
+                    },
+                    0x34 => {
+                        self.reg_h = self.swap(self.reg_h);
+                        mcycles = 2;
+                    },
+                    0x35 => {
+                        self.reg_l = self.swap(self.reg_l);
+                        mcycles = 2;
+                    },
+                    0x37 => {
+                        self.reg_a = self.swap(self.reg_a);
+                        mcycles = 2;
+                    },
+                    0x36 => {
+                        let z = self.bus.read(self.get_hl() as usize);
+                        let result = self.swap(z);
+                        self.bus.write(self.get_hl() as usize, result);
+                        mcycles = 4;
+                    },
+
+                    0x38 => {
+                        self.reg_b = self.srl(self.reg_b);
+                        mcycles = 2;
+                    },
+                    0x39 => {
+                        self.reg_c = self.srl(self.reg_c);
+                        mcycles = 2;
+                    },
+                    0x3A => {
+                        self.reg_d = self.srl(self.reg_d);
+                        mcycles = 2;
+                    },
+                    0x3B => {
+                        self.reg_e = self.srl(self.reg_e);
+                        mcycles = 2;
+                    },
+                    0x3C => {
+                        self.reg_h = self.srl(self.reg_h);
+                        mcycles = 2;
+                    },
+                    0x3D => {
+                        self.reg_l = self.srl(self.reg_l);
+                        mcycles = 2;
+                    },
+                    0x3F => {
+                        self.reg_a = self.srl(self.reg_a);
+                        mcycles = 2;
+                    },
+                    0x3E => {
+                        let z = self.bus.read(self.get_hl() as usize);
+                        let result = self.srl(z);
+                        self.bus.write(self.get_hl() as usize, result);
+                        mcycles = 4;
+                    },
+
+                    0x40 => {
+                        self.bit(self.reg_b, 0);
+                        mcycles = 2;
+                    },
+                    0x41 => {
+                        self.bit(self.reg_c, 0);
+                        mcycles = 2;
+                    },
+                    0x42 => {
+                        self.bit(self.reg_d, 0);
+                        mcycles = 2;
+                    },
+                    0x43 => {
+                        self.bit(self.reg_e, 0);
+                        mcycles = 2;
+                    },
+                    0x44 => {
+                        self.bit(self.reg_h, 0);
+                        mcycles = 2;
+                    },
+                    0x45 => {
+                        self.bit(self.reg_l, 0);
+                        mcycles = 2;
+                    },
+                    0x47 => {
+                        self.bit(self.reg_a, 0);
+                        mcycles = 2;
+                    },
+                    0x46 => {
+                        let z = self.bus.read(self.get_hl() as usize);
+                        self.bit(z, 0);
+                        mcycles = 3;
+                    },
+                    0x48 => {
+                        self.bit(self.reg_b, 1);
+                        mcycles = 2;
+                    },
+                    0x49 => {
+                        self.bit(self.reg_c, 1);
+                        mcycles = 2;
+                    },
+                    0x4A => {
+                        self.bit(self.reg_d, 1);
+                        mcycles = 2;
+                    },
+                    0x4B => {
+                        self.bit(self.reg_e, 1);
+                        mcycles = 2;
+                    },
+                    0x4C => {
+                        self.bit(self.reg_h, 1);
+                        mcycles = 2;
+                    },
+                    0x4D => {
+                        self.bit(self.reg_l, 1);
+                        mcycles = 2;
+                    },
+                    0x4F => {
+                        self.bit(self.reg_a, 1);
+                        mcycles = 2;
+                    },
+                    0x4E => {
+                        let z = self.bus.read(self.get_hl() as usize);
+                        self.bit(z, 1);
+                        mcycles = 3;
+                    },
+                    0x50 => {
+                        self.bit(self.reg_b, 2);
+                        mcycles = 2;
+                    },
+                    0x51 => {
+                        self.bit(self.reg_c, 2);
+                        mcycles = 2;
+                    },
+                    0x52 => {
+                        self.bit(self.reg_d, 2);
+                        mcycles = 2;
+                    },
+                    0x53 => {
+                        self.bit(self.reg_e, 2);
+                        mcycles = 2;
+                    },
+                    0x54 => {
+                        self.bit(self.reg_h, 2);
+                        mcycles = 2;
+                    },
+                    0x55 => {
+                        self.bit(self.reg_l, 2);
+                        mcycles = 2;
+                    },
+                    0x57 => {
+                        self.bit(self.reg_a, 2);
+                        mcycles = 2;
+                    },
+                    0x56 => {
+                        let z = self.bus.read(self.get_hl() as usize);
+                        self.bit(z, 2);
+                        mcycles = 3;
+                    },
+                    0x58 => {
+                        self.bit(self.reg_b, 3);
+                        mcycles = 2;
+                    },
+                    0x59 => {
+                        self.bit(self.reg_c, 3);
+                        mcycles = 2;
+                    },
+                    0x5A => {
+                        self.bit(self.reg_d, 3);
+                        mcycles = 2;
+                    },
+                    0x5B => {
+                        self.bit(self.reg_e, 3);
+                        mcycles = 2;
+                    },
+                    0x5C => {
+                        self.bit(self.reg_h, 3);
+                        mcycles = 2;
+                    },
+                    0x5D => {
+                        self.bit(self.reg_l, 3);
+                        mcycles = 2;
+                    },
+                    0x5F => {
+                        self.bit(self.reg_a, 3);
+                        mcycles = 2;
+                    },
+                    0x5E => {
+                        let z = self.bus.read(self.get_hl() as usize);
+                        self.bit(z, 3);
+                        mcycles = 3;
+                    },
+                    0x60 => {
+                        self.bit(self.reg_b, 4);
+                        mcycles = 2;
+                    },
+                    0x61 => {
+                        self.bit(self.reg_c, 4);
+                        mcycles = 2;
+                    },
+                    0x62 => {
+                        self.bit(self.reg_d, 4);
+                        mcycles = 2;
+                    },
+                    0x63 => {
+                        self.bit(self.reg_e, 4);
+                        mcycles = 2;
+                    },
+                    0x64 => {
+                        self.bit(self.reg_h, 4);
+                        mcycles = 2;
+                    },
+                    0x65 => {
+                        self.bit(self.reg_l, 4);
+                        mcycles = 2;
+                    },
+                    0x67 => {
+                        self.bit(self.reg_a, 4);
+                        mcycles = 2;
+                    },
+                    0x66 => {
+                        let z = self.bus.read(self.get_hl() as usize);
+                        self.bit(z, 4);
+                        mcycles = 3;
+                    },
+                    0x68 => {
+                        self.bit(self.reg_b, 5);
+                        mcycles = 2;
+                    },
+                    0x69 => {
+                        self.bit(self.reg_c, 5);
+                        mcycles = 2;
+                    },
+                    0x6A => {
+                        self.bit(self.reg_d, 5);
+                        mcycles = 2;
+                    },
+                    0x6B => {
+                        self.bit(self.reg_e, 5);
+                        mcycles = 2;
+                    },
+                    0x6C => {
+                        self.bit(self.reg_h, 5);
+                        mcycles = 2;
+                    },
+                    0x6D => {
+                        self.bit(self.reg_l, 5);
+                        mcycles = 2;
+                    },
+                    0x6F => {
+                        self.bit(self.reg_a, 5);
+                        mcycles = 2;
+                    },
+                    0x6E => {
+                        let z = self.bus.read(self.get_hl() as usize);
+                        self.bit(z, 5);
+                        mcycles = 3;
+                    },
+                    0x70 => {
+                        self.bit(self.reg_b, 6);
+                        mcycles = 2;
+                    },
+                    0x71 => {
+                        self.bit(self.reg_c, 6);
+                        mcycles = 2;
+                    },
+                    0x72 => {
+                        self.bit(self.reg_d, 6);
+                        mcycles = 2;
+                    },
+                    0x73 => {
+                        self.bit(self.reg_e, 6);
+                        mcycles = 2;
+                    },
+                    0x74 => {
+                        self.bit(self.reg_h, 6);
+                        mcycles = 2;
+                    },
+                    0x75 => {
+                        self.bit(self.reg_l, 6);
+                        mcycles = 2;
+                    },
+                    0x77 => {
+                        self.bit(self.reg_a, 6);
+                        mcycles = 2;
+                    },
+                    0x76 => {
+                        let z = self.bus.read(self.get_hl() as usize);
+                        self.bit(z, 6);
+                        mcycles = 3;
+                    },
+                    0x78 => {
+                        self.bit(self.reg_b, 7);
+                        mcycles = 2;
+                    },
+                    0x79 => {
+                        self.bit(self.reg_c, 7);
+                        mcycles = 2;
+                    },
+                    0x7A => {
+                        self.bit(self.reg_d, 7);
+                        mcycles = 2;
+                    },
+                    0x7B => {
+                        self.bit(self.reg_e, 7);
+                        mcycles = 2;
+                    },
+                    0x7C => {
+                        self.bit(self.reg_h, 7);
+                        mcycles = 2;
+                    },
+                    0x7D => {
+                        self.bit(self.reg_l, 7);
+                        mcycles = 2;
+                    },
+                    0x7F => {
+                        self.bit(self.reg_a, 7);
+                        mcycles = 2;
+                    },
+                    0x7E => {
+                        let z = self.bus.read(self.get_hl() as usize);
+                        self.bit(z, 7);
+                        mcycles = 3;
+                    },
+
+                    0x80 => {
+                        self.reg_b = self.res(self.reg_b, 0);
+                        mcycles = 2;
+                    },
+                    0x81 => {
+                        self.reg_c = self.res(self.reg_c, 0);
+                        mcycles = 2;
+                    },
+                    0x82 => {
+                        self.reg_d = self.res(self.reg_d, 0);
+                        mcycles = 2;
+                    },
+                    0x83 => {
+                        self.reg_e = self.res(self.reg_e, 0);
+                        mcycles = 2;
+                    },
+                    0x84 => {
+                        self.reg_h = self.res(self.reg_h, 0);
+                        mcycles = 2;
+                    },
+                    0x85 => {
+                        self.reg_l = self.res(self.reg_l, 0);
+                        mcycles = 2;
+                    },
+                    0x87 => {
+                        self.reg_a = self.res(self.reg_a, 0);
+                        mcycles = 2;
+                    },
+                    0x86 => {
+                        let z = self.bus.read(self.get_hl() as usize);
+                        let result = self.res(z, 0);
+                        self.bus.write(self.get_hl() as usize, result);
+                        mcycles = 4;
+                    },
+                    0x88 => {
+                        self.reg_b = self.res(self.reg_b, 1);
+                        mcycles = 2;
+                    },
+                    0x89 => {
+                        self.reg_c = self.res(self.reg_c, 1);
+                        mcycles = 2;
+                    },
+                    0x8A => {
+                        self.reg_d = self.res(self.reg_d, 1);
+                        mcycles = 2;
+                    },
+                    0x8B => {
+                        self.reg_e = self.res(self.reg_e, 1);
+                        mcycles = 2;
+                    },
+                    0x8C => {
+                        self.reg_h = self.res(self.reg_h, 1);
+                        mcycles = 2;
+                    },
+                    0x8D => {
+                        self.reg_l = self.res(self.reg_l, 1);
+                        mcycles = 2;
+                    },
+                    0x8F => {
+                        self.reg_a = self.res(self.reg_a, 1);
+                        mcycles = 2;
+                    },
+                    0x8E => {
+                        let z = self.bus.read(self.get_hl() as usize);
+                        let result = self.res(z, 1);
+                        self.bus.write(self.get_hl() as usize, result);
+                        mcycles = 4;
+                    },
+                    0x90 => {
+                        self.reg_b = self.res(self.reg_b, 2);
+                        mcycles = 2;
+                    },
+                    0x91 => {
+                        self.reg_c = self.res(self.reg_c, 2);
+                        mcycles = 2;
+                    },
+                    0x92 => {
+                        self.reg_d = self.res(self.reg_d, 2);
+                        mcycles = 2;
+                    },
+                    0x93 => {
+                        self.reg_e = self.res(self.reg_e, 2);
+                        mcycles = 2;
+                    },
+                    0x94 => {
+                        self.reg_h = self.res(self.reg_h, 2);
+                        mcycles = 2;
+                    },
+                    0x95 => {
+                        self.reg_l = self.res(self.reg_l, 2);
+                        mcycles = 2;
+                    },
+                    0x97 => {
+                        self.reg_a = self.res(self.reg_a, 2);
+                        mcycles = 2;
+                    },
+                    0x96 => {
+                        let z = self.bus.read(self.get_hl() as usize);
+                        let result = self.res(z, 2);
+                        self.bus.write(self.get_hl() as usize, result);
+                        mcycles = 4;
+                    },
+                    0x98 => {
+                        self.reg_b = self.res(self.reg_b, 3);
+                        mcycles = 2;
+                    },
+                    0x99 => {
+                        self.reg_c = self.res(self.reg_c, 3);
+                        mcycles = 2;
+                    },
+                    0x9A => {
+                        self.reg_d = self.res(self.reg_d, 3);
+                        mcycles = 2;
+                    },
+                    0x9B => {
+                        self.reg_e = self.res(self.reg_e, 3);
+                        mcycles = 2;
+                    },
+                    0x9C => {
+                        self.reg_h = self.res(self.reg_h, 3);
+                        mcycles = 2;
+                    },
+                    0x9D => {
+                        self.reg_l = self.res(self.reg_l, 3);
+                        mcycles = 2;
+                    },
+                    0x9F => {
+                        self.reg_a = self.res(self.reg_a, 3);
+                        mcycles = 2;
+                    },
+                    0x9E => {
+                        let z = self.bus.read(self.get_hl() as usize);
+                        let result = self.res(z, 3);
+                        self.bus.write(self.get_hl() as usize, result);
+                        mcycles = 4;
+                    },
+                    0xA0 => {
+                        self.reg_b = self.res(self.reg_b, 4);
+                        mcycles = 2;
+                    },
+                    0xA1 => {
+                        self.reg_c = self.res(self.reg_c, 4);
+                        mcycles = 2;
+                    },
+                    0xA2 => {
+                        self.reg_d = self.res(self.reg_d, 4);
+                        mcycles = 2;
+                    },
+                    0xA3 => {
+                        self.reg_e = self.res(self.reg_e, 4);
+                        mcycles = 2;
+                    },
+                    0xA4 => {
+                        self.reg_h = self.res(self.reg_h, 4);
+                        mcycles = 2;
+                    },
+                    0xA5 => {
+                        self.reg_l = self.res(self.reg_l, 4);
+                        mcycles = 2;
+                    },
+                    0xA7 => {
+                        self.reg_a = self.res(self.reg_a, 4);
+                        mcycles = 2;
+                    },
+                    0xA6 => {
+                        let z = self.bus.read(self.get_hl() as usize);
+                        let result = self.res(z, 4);
+                        self.bus.write(self.get_hl() as usize, result);
+                        mcycles = 4;
+                    },
+                    0xA8 => {
+                        self.reg_b = self.res(self.reg_b, 5);
+                        mcycles = 2;
+                    },
+                    0xA9 => {
+                        self.reg_c = self.res(self.reg_c, 5);
+                        mcycles = 2;
+                    },
+                    0xAA => {
+                        self.reg_d = self.res(self.reg_d, 5);
+                        mcycles = 2;
+                    },
+                    0xAB => {
+                        self.reg_e = self.res(self.reg_e, 5);
+                        mcycles = 2;
+                    },
+                    0xAC => {
+                        self.reg_h = self.res(self.reg_h, 5);
+                        mcycles = 2;
+                    },
+                    0xAD => {
+                        self.reg_l = self.res(self.reg_l, 5);
+                        mcycles = 2;
+                    },
+                    0xAF => {
+                        self.reg_a = self.res(self.reg_a, 5);
+                        mcycles = 2;
+                    },
+                    0xAE => {
+                        let z = self.bus.read(self.get_hl() as usize);
+                        let result = self.res(z, 5);
+                        self.bus.write(self.get_hl() as usize, result);
+                        mcycles = 4;
+                    },
+                    0xB0 => {
+                        self.reg_b = self.res(self.reg_b, 6);
+                        mcycles = 2;
+                    },
+                    0xB1 => {
+                        self.reg_c = self.res(self.reg_c, 6);
+                        mcycles = 2;
+                    },
+                    0xB2 => {
+                        self.reg_d = self.res(self.reg_d, 6);
+                        mcycles = 2;
+                    },
+                    0xB3 => {
+                        self.reg_e = self.res(self.reg_e, 6);
+                        mcycles = 2;
+                    },
+                    0xB4 => {
+                        self.reg_h = self.res(self.reg_h, 6);
+                        mcycles = 2;
+                    },
+                    0xB5 => {
+                        self.reg_l = self.res(self.reg_l, 6);
+                        mcycles = 2;
+                    },
+                    0xB7 => {
+                        self.reg_a = self.res(self.reg_a, 6);
+                        mcycles = 2;
+                    },
+                    0xB6 => {
+                        let z = self.bus.read(self.get_hl() as usize);
+                        let result = self.res(z, 6);
+                        self.bus.write(self.get_hl() as usize, result);
+                        mcycles = 4;
+                    },
+                    0xB8 => {
+                        self.reg_b = self.res(self.reg_b, 7);
+                        mcycles = 2;
+                    },
+                    0xB9 => {
+                        self.reg_c = self.res(self.reg_c, 7);
+                        mcycles = 2;
+                    },
+                    0xBA => {
+                        self.reg_d = self.res(self.reg_d, 7);
+                        mcycles = 2;
+                    },
+                    0xBB => {
+                        self.reg_e = self.res(self.reg_e, 7);
+                        mcycles = 2;
+                    },
+                    0xBC => {
+                        self.reg_h = self.res(self.reg_h, 7);
+                        mcycles = 2;
+                    },
+                    0xBD => {
+                        self.reg_l = self.res(self.reg_l, 7);
+                        mcycles = 2;
+                    },
+                    0xBF => {
+                        self.reg_a = self.res(self.reg_a, 7);
+                        mcycles = 2;
+                    },
+                    0xBE => {
+                        let z = self.bus.read(self.get_hl() as usize);
+                        let result = self.res(z, 7);
+                        self.bus.write(self.get_hl() as usize, result);
+                        mcycles = 4;
+                    },
+
+                    0xC0 => {
+                        self.reg_b = self.set(self.reg_b, 0);
+                        mcycles = 2;
+                    },
+                    0xC1 => {
+                        self.reg_c = self.set(self.reg_c, 0);
+                        mcycles = 2;
+                    },
+                    0xC2 => {
+                        self.reg_d = self.set(self.reg_d, 0);
+                        mcycles = 2;
+                    },
+                    0xC3 => {
+                        self.reg_e = self.set(self.reg_e, 0);
+                        mcycles = 2;
+                    },
+                    0xC4 => {
+                        self.reg_h = self.set(self.reg_h, 0);
+                        mcycles = 2;
+                    },
+                    0xC5 => {
+                        self.reg_l = self.set(self.reg_l, 0);
+                        mcycles = 2;
+                    },
+                    0xC7 => {
+                        self.reg_a = self.set(self.reg_a, 0);
+                        mcycles = 2;
+                    },
+                    0xC6 => {
+                        let z = self.bus.read(self.get_hl() as usize);
+                        let result = self.set(z, 0);
+                        self.bus.write(self.get_hl() as usize, result);
+                        mcycles = 4;
+                    },
+                    0xC8 => {
+                        self.reg_b = self.set(self.reg_b, 1);
+                        mcycles = 2;
+                    },
+                    0xC9 => {
+                        self.reg_c = self.set(self.reg_c, 1);
+                        mcycles = 2;
+                    },
+                    0xCA => {
+                        self.reg_d = self.set(self.reg_d, 1);
+                        mcycles = 2;
+                    },
+                    0xCB => {
+                        self.reg_e = self.set(self.reg_e, 1);
+                        mcycles = 2;
+                    },
+                    0xCC => {
+                        self.reg_h = self.set(self.reg_h, 1);
+                        mcycles = 2;
+                    },
+                    0xCD => {
+                        self.reg_l = self.set(self.reg_l, 1);
+                        mcycles = 2;
+                    },
+                    0xCF => {
+                        self.reg_a = self.set(self.reg_a, 1);
+                        mcycles = 2;
+                    },
+                    0xCE => {
+                        let z = self.bus.read(self.get_hl() as usize);
+                        let result = self.set(z, 1);
+                        self.bus.write(self.get_hl() as usize, result);
+                        mcycles = 4;
+                    },
+                    0xD0 => {
+                        self.reg_b = self.set(self.reg_b, 2);
+                        mcycles = 2;
+                    },
+                    0xD1 => {
+                        self.reg_c = self.set(self.reg_c, 2);
+                        mcycles = 2;
+                    },
+                    0xD2 => {
+                        self.reg_d = self.set(self.reg_d, 2);
+                        mcycles = 2;
+                    },
+                    0xD3 => {
+                        self.reg_e = self.set(self.reg_e, 2);
+                        mcycles = 2;
+                    },
+                    0xD4 => {
+                        self.reg_h = self.set(self.reg_h, 2);
+                        mcycles = 2;
+                    },
+                    0xD5 => {
+                        self.reg_l = self.set(self.reg_l, 2);
+                        mcycles = 2;
+                    },
+                    0xD7 => {
+                        self.reg_a = self.set(self.reg_a, 2);
+                        mcycles = 2;
+                    },
+                    0xD6 => {
+                        let z = self.bus.read(self.get_hl() as usize);
+                        let result = self.set(z, 2);
+                        self.bus.write(self.get_hl() as usize, result);
+                        mcycles = 4;
+                    },
+                    0xD8 => {
+                        self.reg_b = self.set(self.reg_b, 3);
+                        mcycles = 2;
+                    },
+                    0xD9 => {
+                        self.reg_c = self.set(self.reg_c, 3);
+                        mcycles = 2;
+                    },
+                    0xDA => {
+                        self.reg_d = self.set(self.reg_d, 3);
+                        mcycles = 2;
+                    },
+                    0xDB => {
+                        self.reg_e = self.set(self.reg_e, 3);
+                        mcycles = 2;
+                    },
+                    0xDC => {
+                        self.reg_h = self.set(self.reg_h, 3);
+                        mcycles = 2;
+                    },
+                    0xDD => {
+                        self.reg_l = self.set(self.reg_l, 3);
+                        mcycles = 2;
+                    },
+                    0xDF => {
+                        self.reg_a = self.set(self.reg_a, 3);
+                        mcycles = 2;
+                    },
+                    0xDE => {
+                        let z = self.bus.read(self.get_hl() as usize);
+                        let result = self.set(z, 3);
+                        self.bus.write(self.get_hl() as usize, result);
+                        mcycles = 4;
+                    },
+                    0xE0 => {
+                        self.reg_b = self.set(self.reg_b, 4);
+                        mcycles = 2;
+                    },
+                    0xE1 => {
+                        self.reg_c = self.set(self.reg_c, 4);
+                        mcycles = 2;
+                    },
+                    0xE2 => {
+                        self.reg_d = self.set(self.reg_d, 4);
+                        mcycles = 2;
+                    },
+                    0xE3 => {
+                        self.reg_e = self.set(self.reg_e, 4);
+                        mcycles = 2;
+                    },
+                    0xE4 => {
+                        self.reg_h = self.set(self.reg_h, 4);
+                        mcycles = 2;
+                    },
+                    0xE5 => {
+                        self.reg_l = self.set(self.reg_l, 4);
+                        mcycles = 2;
+                    },
+                    0xE7 => {
+                        self.reg_a = self.set(self.reg_a, 4);
+                        mcycles = 2;
+                    },
+                    0xE6 => {
+                        let z = self.bus.read(self.get_hl() as usize);
+                        let result = self.set(z, 4);
+                        self.bus.write(self.get_hl() as usize, result);
+                        mcycles = 4;
+                    },
+                    0xE8 => {
+                        self.reg_b = self.set(self.reg_b, 5);
+                        mcycles = 2;
+                    },
+                    0xE9 => {
+                        self.reg_c = self.set(self.reg_c, 5);
+                        mcycles = 2;
+                    },
+                    0xEA => {
+                        self.reg_d = self.set(self.reg_d, 5);
+                        mcycles = 2;
+                    },
+                    0xEB => {
+                        self.reg_e = self.set(self.reg_e, 5);
+                        mcycles = 2;
+                    },
+                    0xEC => {
+                        self.reg_h = self.set(self.reg_h, 5);
+                        mcycles = 2;
+                    },
+                    0xED => {
+                        self.reg_l = self.set(self.reg_l, 5);
+                        mcycles = 2;
+                    },
+                    0xEF => {
+                        self.reg_a = self.set(self.reg_a, 5);
+                        mcycles = 2;
+                    },
+                    0xEE => {
+                        let z = self.bus.read(self.get_hl() as usize);
+                        let result = self.set(z, 5);
+                        self.bus.write(self.get_hl() as usize, result);
+                        mcycles = 4;
+                    },
+                    0xF0 => {
+                        self.reg_b = self.set(self.reg_b, 6);
+                        mcycles = 2;
+                    },
+                    0xF1 => {
+                        self.reg_c = self.set(self.reg_c, 6);
+                        mcycles = 2;
+                    },
+                    0xF2 => {
+                        self.reg_d = self.set(self.reg_d, 6);
+                        mcycles = 2;
+                    },
+                    0xF3 => {
+                        self.reg_e = self.set(self.reg_e, 6);
+                        mcycles = 2;
+                    },
+                    0xF4 => {
+                        self.reg_h = self.set(self.reg_h, 6);
+                        mcycles = 2;
+                    },
+                    0xF5 => {
+                        self.reg_l = self.set(self.reg_l, 6);
+                        mcycles = 2;
+                    },
+                    0xF7 => {
+                        self.reg_a = self.set(self.reg_a, 6);
+                        mcycles = 2;
+                    },
+                    0xF6 => {
+                        let z = self.bus.read(self.get_hl() as usize);
+                        let result = self.set(z, 6);
+                        self.bus.write(self.get_hl() as usize, result);
+                        mcycles = 4;
+                    },
+                    0xF8 => {
+                        self.reg_b = self.set(self.reg_b, 7);
+                        mcycles = 2;
+                    },
+                    0xF9 => {
+                        self.reg_c = self.set(self.reg_c, 7);
+                        mcycles = 2;
+                    },
+                    0xFA => {
+                        self.reg_d = self.set(self.reg_d, 7);
+                        mcycles = 2;
+                    },
+                    0xFB => {
+                        self.reg_e = self.set(self.reg_e, 7);
+                        mcycles = 2;
+                    },
+                    0xFC => {
+                        self.reg_h = self.set(self.reg_h, 7);
+                        mcycles = 2;
+                    },
+                    0xFD => {
+                        self.reg_l = self.set(self.reg_l, 7);
+                        mcycles = 2;
+                    },
+                    0xFF => {
+                        self.reg_a = self.set(self.reg_a, 7);
+                        mcycles = 2;
+                    },
+                    0xFE => {
+                        let z = self.bus.read(self.get_hl() as usize);
+                        let result = self.set(z, 7);
+                        self.bus.write(self.get_hl() as usize, result);
+                        mcycles = 4;
+                    },
+
+                }
+            },
+
+
             _ => ()
         }
         //self.pc += 1;
