@@ -1,6 +1,6 @@
 
 #[derive(Debug)]
-struct MemBus{
+pub struct MemBus{
     mem: [u8; 0xFFFF]
 }
 
@@ -85,24 +85,61 @@ impl CPU{
         self.reg_l = (val&0xff) as u8
     }
 
-    // fn get_zflag(&self)-> bool{
-    //     (self.reg_f & 1<<7) != 0
-    // }
+    fn get_zero(&self)-> bool{
+         (self.reg_f & 1<<7) != 0
+    }
 
-    // fn get_nflag(&self)-> bool{
-    //     (self.reg_f & 1<<6) != 0
-    // }
+    fn get_neg(&self)-> bool{
+         (self.reg_f & 1<<6) != 0
+    }
 
-    // fn get_hflag(&self)-> bool{
-    //     (self.reg_f & 1<<5) != 0
-    // }
+    fn get_halfcarry(&self)-> bool{
+         (self.reg_f & 1<<5) != 0
+    }
 
-    // fn get_cflag(&self)-> bool{
-    //     (self.reg_f & 1<<4) != 0
-    // }
+    fn get_carry(&self)-> bool{
+        (self.reg_f & 1<<4) != 0
+    }
 
-    // temporary memory function
-   
+    fn set_zero(&mut self, val:bool){
+        if val{
+            self.reg_f |= 1<<7;
+        }else{
+            self.reg_f &= !(1<<7);
+        }
+    }
+    fn set_neg(&mut self, val:bool){
+        if val{
+            self.reg_f |= 1<<6;
+        }else{
+            self.reg_f &= !(1<<6);
+        }
+    }
+    fn set_halfcarry(&mut self, val:bool){
+        if val{
+            self.reg_f |= 1<<5;
+        }else{
+            self.reg_f &= !(1<<5);
+        }
+    }
+    fn set_carry(&mut self, val:bool){
+        if val{
+            self.reg_f |= 1<<4;
+        }else{
+            self.reg_f &= !(1<<4);
+        }
+    }
+
+   fn push_stack(&mut self, val:u16){
+        self.sp -= 2;
+        self.bus.write(self.sp as usize, (val&0xff) as u8);
+        self.bus.write((self.sp+1) as usize, (val>>8) as u8);
+    }
+    fn pop_stack(&mut self) -> u16{
+        let val = (self.bus.read(self.sp as usize) as u16) | ((self.bus.read((self.sp+1) as usize) as u16)<<8);
+        self.sp += 2;
+        return val
+    }
 
     pub fn run_opcode(&mut self,op:u8) -> u8{
         let mut mcycles = 0;
@@ -332,7 +369,7 @@ impl CPU{
             0xE0 => {
                 let z:u8 = self.bus.read((0xFF00|(self.pc as u16)) as usize);
                 self.pc += 1;
-                self.bus.write((0xFF00|(self.pc as u16)) as usize, self.reg_a);
+                self.bus.write((0xFF00|(z as u16)) as usize, self.reg_a);
                 mcycles = 3;
             },
 
@@ -398,6 +435,58 @@ impl CPU{
                 self.sp = self.get_hl();
                 mcycles = 2;
             },
+
+            0xC5 => {
+                self.push_stack(self.get_bc());
+                mcycles = 4;
+            },
+            0xD5 => {
+                self.push_stack(self.get_de());
+                mcycles = 4;
+            },
+            0xE5 => {
+                self.push_stack(self.get_hl());
+                mcycles = 4;
+            },
+            0xF5 => {
+                self.push_stack(self.get_af());
+                mcycles = 4;
+            },
+
+            0xC1 => {
+                let z = self.pop_stack();
+                self.set_bc(z);
+                mcycles = 3;
+            },
+            0xD1 => {
+                let z = self.pop_stack();
+                self.set_de(z);
+                mcycles = 3;
+            },
+            0xE1 => {
+                let z = self.pop_stack();
+                self.set_hl(z);
+                mcycles = 3;
+            },
+            0xF1 => {
+                let z = self.pop_stack();
+                self.set_af(z);
+                mcycles = 3;
+            },
+
+            // might not be implemented correctly so gotta check later
+            0xF8 => {
+                let z:i8 = self.bus.read(self.pc as usize) as i8;
+                self.pc += 1;
+                let result = self.sp.wrapping_add(z as u16);
+                self.set_hl(result);
+                self.set_zero(false);
+                self.set_neg(false);
+                self.set_halfcarry((self.sp&0x0F) + (z as u16&0x0F) > 0x0F);
+                self.set_carry((self.sp&0xFF) + (z as u16&0xFF) > 0xFF);
+                mcycles = 3;
+            },
+
             _ => ()
         }
         //self.pc += 1;
