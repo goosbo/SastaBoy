@@ -1,4 +1,3 @@
-
 #[derive(Debug)]
 pub struct MemBus{
     mem: [u8; 0xFFFF]
@@ -26,7 +25,8 @@ pub struct CPU {
     reg_l: u8,
     sp: u16,
     pc: u16,
-    bus: MemBus
+    bus: MemBus,
+    ime: bool,
 }
 
 impl CPU{
@@ -42,6 +42,7 @@ impl CPU{
             reg_l: 0,
             sp: 0,
             pc: 0,
+            ime: false,
             bus: MemBus{
                 mem: [0; 0xFFFF]
             }
@@ -2305,6 +2306,223 @@ impl CPU{
                 }
             },
 
+            0xC3 =>{
+                let low = self.bus.read(self.pc as usize);
+                let high = self.bus.read((self.pc + 1) as usize);
+                self.pc = ((high as u16) << 8) | (low as u16);
+                mcycles = 4;
+            },
+            0xE9 =>{
+                self.pc = self.get_hl();
+                mcycles = 1;
+            },
+            0xC2 =>{
+                let low = self.bus.read(self.pc as usize);
+                self.pc += 1;
+                let high = self.bus.read(self.pc as usize);
+                self.pc += 1;
+                if !self.get_zero() {
+                    self.pc = ((high as u16) << 8) | (low as u16);
+                    mcycles = 4;
+                } else {
+                    mcycles = 3;
+                }
+            },
+            0xCA => {
+                let low = self.bus.read(self.pc as usize);
+                self.pc += 1;
+                let high = self.bus.read(self.pc as usize);
+                self.pc += 1;
+                if self.get_zero() {
+                    self.pc = ((high as u16) << 8) | (low as u16);
+                    mcycles = 4;
+                } else {
+                    mcycles = 3;
+                }
+            },
+            0xD2 => {
+                let low = self.bus.read(self.pc as usize);
+                self.pc += 1;
+                let high = self.bus.read(self.pc as usize);
+                self.pc += 1;
+                if !self.get_carry() {
+                    self.pc = ((high as u16) << 8) | (low as u16);
+                    mcycles = 4;
+                } else {
+                    mcycles = 3;
+                }
+            },
+            0xDA => {
+                let low = self.bus.read(self.pc as usize);
+                self.pc += 1;
+                let high = self.bus.read(self.pc as usize);
+                self.pc += 1;
+                if self.get_carry() {
+                    self.pc = ((high as u16) << 8) | (low as u16);
+                    mcycles = 4;
+                } else {
+                    mcycles = 3;
+                }
+            },
+
+            0x18 => {
+                let offset = self.bus.read(self.pc as usize) as i8;
+                self.pc += 1;
+                self.pc = self.pc.wrapping_add(offset as u16);
+                mcycles = 3;
+            },
+
+            0x20 => {
+                let offset = self.bus.read(self.pc as usize) as i8;
+                self.pc += 1;
+                if !self.get_zero() {
+                    self.pc = self.pc.wrapping_add(offset as u16);
+                    mcycles = 3;
+                } else {
+                    mcycles = 2;
+                }
+            },
+            0x28 => {
+                let offset = self.bus.read(self.pc as usize) as i8;
+                self.pc += 1;
+                if self.get_zero() {
+                    self.pc = self.pc.wrapping_add(offset as u16);
+                    mcycles = 3;
+                } else {
+                    mcycles = 2;
+                }
+            },
+            0x30 => {
+                let offset = self.bus.read(self.pc as usize) as i8;
+                self.pc += 1;
+                if !self.get_carry() {
+                    self.pc = self.pc.wrapping_add(offset as u16);
+                    mcycles = 3;
+                } else {
+                    mcycles = 2;
+                }
+            },
+            0x38 => {
+                let offset = self.bus.read(self.pc as usize) as i8;
+                self.pc += 1;
+                if self.get_carry() {
+                    self.pc = self.pc.wrapping_add(offset as u16);
+                    mcycles = 3;
+                } else {
+                    mcycles = 2;
+                }
+            },
+
+            0xCD => {
+                let low = self.bus.read(self.pc as usize);
+                self.pc += 1;
+                let high = self.bus.read(self.pc as usize);
+                self.pc += 1;
+                self.push_stack(self.pc);
+                self.pc = ((high as u16) << 8) | (low as u16);
+                mcycles = 6;
+            },
+
+            0xC4 => {
+                let low = self.bus.read(self.pc as usize);
+                self.pc += 1;
+                let high = self.bus.read(self.pc as usize);
+                self.pc += 1;
+                if !self.get_zero() {
+                    self.push_stack(self.pc);
+                    self.pc = ((high as u16) << 8) | (low as u16);
+                    mcycles = 6;
+                } else {
+                    mcycles = 3;
+                }
+            },
+            0xCC => {
+                let low = self.bus.read(self.pc as usize);
+                self.pc += 1;
+                let high = self.bus.read(self.pc as usize);
+                self.pc += 1;
+                if self.get_zero() {
+                    self.push_stack(self.pc);
+                    self.pc = ((high as u16) << 8) | (low as u16);
+                    mcycles = 6;
+                } else {
+                    mcycles = 3;
+                }
+            },
+            0xD4 => {
+                let low = self.bus.read(self.pc as usize);
+                self.pc += 1;
+                let high = self.bus.read(self.pc as usize);
+                self.pc += 1;
+                if !self.get_carry() {
+                    self.push_stack(self.pc);
+                    self.pc = ((high as u16) << 8) | (low as u16);
+                    mcycles = 6;
+                } else {
+                    mcycles = 3;
+                }
+            },
+            0xDC => {
+                let low = self.bus.read(self.pc as usize);
+                self.pc += 1;
+                let high = self.bus.read(self.pc as usize);
+                self.pc += 1;
+                if self.get_carry() {
+                    self.push_stack(self.pc);
+                    self.pc = ((high as u16) << 8) | (low as u16);
+                    mcycles = 6;
+                } else {
+                    mcycles = 3;
+                }
+            },
+
+            0xC9 => {
+                self.pc = self.pop_stack();
+                mcycles = 4;
+            },
+            0xC0 => {
+                if !self.get_zero() {
+                    self.pc = self.pop_stack();
+                    mcycles = 5;
+                } else {
+                    mcycles = 2;
+                }
+            },
+            0xC8 => {
+                if self.get_zero() {
+                    self.pc = self.pop_stack();
+                    mcycles = 5;
+                } else {
+                    mcycles = 2;
+                }
+            },
+            0xD0 => {
+                if !self.get_carry() {
+                    self.pc = self.pop_stack();
+                    mcycles = 5;
+                } else {
+                    mcycles = 2;
+                }
+            },
+            0xD8 => {
+                if self.get_carry() {
+                    self.pc = self.pop_stack();
+                    mcycles = 5;
+                } else {
+                    mcycles = 2;
+                }
+            },
+            0xD9 => {
+                // haven't done anything for interrupts yet so temporary code
+                self.ime = true;
+                self.pc = self.pop_stack();
+                mcycles = 4;
+            },
+            0xDF => {
+                self.push_stack(self.pc);
+                self.pc = 0x18;
+                mcycles = 4;
+            },
 
             _ => ()
         }
