@@ -131,6 +131,7 @@ impl CPU{
         }
     }
 
+    // helper functions to handle instructions
    fn push_stack(&mut self, val:u16){
         self.sp -= 2;
         self.bus.write(self.sp as usize, (val&0xff) as u8);
@@ -1176,7 +1177,7 @@ impl CPU{
                 self.set_zero(false);
                 mcycles = 1;
             },
-            
+            // cb instructions (might try to shrink it later cuz code repeated a lot)
             0xCB => {
                 let op2:u8 = self.bus.read(self.pc as usize);
                 self.pc += 1;
@@ -2523,7 +2524,10 @@ impl CPU{
                 self.pc = 0x18;
                 mcycles = 4;
             },
-
+            0x00 => {
+                mcycles = 1;
+            },
+            // i'll add halt stop and ei later after i figure out how to handle them
             _ => ()
         }
         //self.pc += 1;
