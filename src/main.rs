@@ -1,6 +1,7 @@
 mod cpu;
 mod interrupt;
 mod memory;
+mod timer;
 
 use std::cell::RefCell;
 use std::rc::Rc;
