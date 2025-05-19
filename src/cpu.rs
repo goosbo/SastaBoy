@@ -1,5 +1,5 @@
 use std::cell::RefCell;
-use std::rc::Rc;
+use std::rc::Weak;
 
 use crate::interrupt::InterruptHandlerThing;
 use crate::memory::Mem;
@@ -18,13 +18,13 @@ pub struct CPU {
     pc: u16,
     // made them use smart pointers
     is_halted: bool,
-    mem: Rc<RefCell<Mem>>,
-    interrupt_thing: Rc<RefCell<InterruptHandlerThing>>,
+    mem: Weak<RefCell<Mem>>,
+    interrupt_thing: Weak<RefCell<InterruptHandlerThing>>,
     
 }
 
 impl CPU{
-    pub fn new(memm : Rc<RefCell<Mem>>,intrrpt: Rc<RefCell<InterruptHandlerThing>>) -> Self{
+    pub fn new(memm : Weak<RefCell<Mem>>,intrrpt: Weak<RefCell<InterruptHandlerThing>>) -> Self{
         CPU{
             reg_a: 0,
             reg_b: 0,
@@ -126,17 +126,32 @@ impl CPU{
 
     // helper functions to handle instructions
    fn push_stack(&mut self, val:u16){
-        self.sp -= 2;
-        self.mem.borrow_mut().write(self.sp as usize, (val&0xff) as u8);
-        self.mem.borrow_mut().write((self.sp+1) as usize, (val>>8) as u8);
+        if let Some(memory) = self.mem.upgrade(){
+            self.sp -= 2;
+            memory.borrow_mut().write(self.sp as usize, (val&0xff) as u8);
+            memory.borrow_mut().write((self.sp+1) as usize, (val>>8) as u8);
+        }
+        else{
+            panic!("memory manager reference dropped!");
+        }
+        
     }
     fn pop_stack(&mut self) -> u16{
-        let val = (self.mem.borrow_mut().read(self.sp as usize) as u16) | ((self.mem.borrow_mut().read((self.sp+1) as usize) as u16)<<8);
-        self.sp += 2;
+        let val;
+        
+        if let Some(memory) = self.mem.upgrade(){
+            val = (memory.borrow_mut().read(self.sp as usize) as u16) | ((memory.borrow_mut().read((self.sp+1) as usize) as u16)<<8);
+            self.sp += 2;
+        }
+        else {
+            panic!("memory manager reference dropped!");
+        }
+        
         return val
     }
 
     fn add(&mut self, val:u8){
+
         let result = self.reg_a.wrapping_add(val);
         self.set_zero(result == 0);
         self.set_neg(false);
@@ -321,6 +336,8 @@ impl CPU{
     }
     
     pub fn run_opcode(&mut self,op:u8) -> u8{
+        let interrupt_handl = self.interrupt_thing.upgrade().expect("interrupt handler reference dropped!");
+        let memory = self.mem.upgrade().expect("memory manager reference dropped!");
         let mut mcycles = 0;
         match op{
             0x40 => {self.reg_b = self.reg_b; mcycles = 1},
@@ -380,234 +397,234 @@ impl CPU{
             0x7F => {self.reg_a = self.reg_a; mcycles = 1},
 
             0x06 => {
-                let z: u8 = self.mem.borrow_mut().read(self.pc as usize);
+                let z: u8 = memory.borrow_mut().read(self.pc as usize);
                 self.pc += 1;
                 self.reg_b = z;
                 mcycles = 2;
             },
             0x0E => {
-                let z: u8 = self.mem.borrow_mut().read(self.pc as usize);
+                let z: u8 = memory.borrow_mut().read(self.pc as usize);
                 self.pc += 1;
                 self.reg_c = z;
                 mcycles = 2;
             },
             0x16 => {
-                let z: u8 = self.mem.borrow_mut().read(self.pc as usize);
+                let z: u8 = memory.borrow_mut().read(self.pc as usize);
                 self.pc += 1;
                 self.reg_d = z;
                 mcycles = 2;
             },
             0x1E => {
-                let z: u8 = self.mem.borrow_mut().read(self.pc as usize);
+                let z: u8 = memory.borrow_mut().read(self.pc as usize);
                 self.pc += 1;
                 self.reg_e = z;
                 mcycles = 2;
             },
             0x26 => {
-                let z: u8 = self.mem.borrow_mut().read(self.pc as usize);
+                let z: u8 = memory.borrow_mut().read(self.pc as usize);
                 self.pc += 1;
                 self.reg_h = z;
                 mcycles = 2;
             },
             0x2E => {
-                let z: u8 = self.mem.borrow_mut().read(self.pc as usize);
+                let z: u8 = memory.borrow_mut().read(self.pc as usize);
                 self.pc += 1;
                 self.reg_l = z;
                 mcycles = 2;
             },
             0x3E => {
-                let z: u8 = self.mem.borrow_mut().read(self.pc as usize);
+                let z: u8 = memory.borrow_mut().read(self.pc as usize);
                 self.pc += 1;
                 self.reg_a = z;
                 mcycles = 2;
             },
 
             0x46 => {
-                let z:u8 = self.mem.borrow_mut().read(self.get_hl() as usize);
+                let z:u8 = memory.borrow_mut().read(self.get_hl() as usize);
                 self.reg_b = z;
                 mcycles = 2;
             },
             0x4E => {
-                let z:u8 = self.mem.borrow_mut().read(self.get_hl() as usize);
+                let z:u8 = memory.borrow_mut().read(self.get_hl() as usize);
                 self.reg_c = z;
                 mcycles = 2;
             },
             0x56 => {
-                let z:u8 = self.mem.borrow_mut().read(self.get_hl() as usize);
+                let z:u8 = memory.borrow_mut().read(self.get_hl() as usize);
                 self.reg_d = z;
                 mcycles = 2;
             },
             0x5E => {
-                let z:u8 = self.mem.borrow_mut().read(self.get_hl() as usize);
+                let z:u8 = memory.borrow_mut().read(self.get_hl() as usize);
                 self.reg_e = z;
                 mcycles = 2;
             },
             0x66 => {
-                let z:u8 = self.mem.borrow_mut().read(self.get_hl() as usize);
+                let z:u8 = memory.borrow_mut().read(self.get_hl() as usize);
                 self.reg_h = z;
                 mcycles = 2;
             },
             0x6E => {
-                let z:u8 = self.mem.borrow_mut().read(self.get_hl() as usize);
+                let z:u8 = memory.borrow_mut().read(self.get_hl() as usize);
                 self.reg_l = z;
                 mcycles = 2;
             },
             0x7E => {
-                let z:u8 = self.mem.borrow_mut().read(self.get_hl() as usize);
+                let z:u8 = memory.borrow_mut().read(self.get_hl() as usize);
                 self.reg_a = z;
                 mcycles = 2;
             },
 
             0x70 => {
-                self.mem.borrow_mut().write(self.get_hl() as usize, self.reg_b);
+                memory.borrow_mut().write(self.get_hl() as usize, self.reg_b);
                 mcycles = 2;
             },
             0x71 => {
-                self.mem.borrow_mut().write(self.get_hl() as usize, self.reg_c);
+                memory.borrow_mut().write(self.get_hl() as usize, self.reg_c);
                 mcycles = 2;
             },
             0x72 => {
-                self.mem.borrow_mut().write(self.get_hl() as usize, self.reg_d);
+                memory.borrow_mut().write(self.get_hl() as usize, self.reg_d);
                 mcycles = 2;
             },
             0x73 => {
-                self.mem.borrow_mut().write(self.get_hl() as usize, self.reg_e);
+                memory.borrow_mut().write(self.get_hl() as usize, self.reg_e);
                 mcycles = 2;
             },
             0x74 => {
-                self.mem.borrow_mut().write(self.get_hl() as usize, self.reg_h);
+                memory.borrow_mut().write(self.get_hl() as usize, self.reg_h);
                 mcycles = 2;
             },
             0x75 => {
-                self.mem.borrow_mut().write(self.get_hl() as usize, self.reg_l);
+                memory.borrow_mut().write(self.get_hl() as usize, self.reg_l);
                 mcycles = 2;
             },
             0x77 => {
-                self.mem.borrow_mut().write(self.get_hl() as usize, self.reg_a);
+                memory.borrow_mut().write(self.get_hl() as usize, self.reg_a);
                 mcycles = 2;
             },
 
             0x36 => {
-                let z = self.mem.borrow_mut().read(self.pc as usize);
+                let z = memory.borrow_mut().read(self.pc as usize);
                 self.pc += 1;
-                self.mem.borrow_mut().write(self.get_hl() as usize, z);
+                memory.borrow_mut().write(self.get_hl() as usize, z);
                 mcycles = 3;
             },
 
             0x0A => {
-                let z:u8 = self.mem.borrow_mut().read(self.get_bc() as usize);
+                let z:u8 = memory.borrow_mut().read(self.get_bc() as usize);
                 self.reg_a = z;
                 mcycles = 2;
             },
             0x1A => {
-                let z:u8 = self.mem.borrow_mut().read(self.get_de() as usize);
+                let z:u8 = memory.borrow_mut().read(self.get_de() as usize);
                 self.reg_a = z;
                 mcycles = 2;
             },
             0x02 => {
-                self.mem.borrow_mut().write(self.get_bc() as usize, self.reg_a);
+                memory.borrow_mut().write(self.get_bc() as usize, self.reg_a);
                 mcycles = 2;
             },
             0x12 => {
-                self.mem.borrow_mut().write(self.get_de() as usize, self.reg_a);
+                memory.borrow_mut().write(self.get_de() as usize, self.reg_a);
                 mcycles = 2;
             },
             0xFA => {
-                let z:u16 = self.mem.borrow_mut().read(self.pc as usize) as u16;
+                let z:u16 = memory.borrow_mut().read(self.pc as usize) as u16;
                 self.pc += 1;
-                let z2:u16 = self.mem.borrow_mut().read(self.pc as usize) as u16;
+                let z2:u16 = memory.borrow_mut().read(self.pc as usize) as u16;
                 self.pc += 1;
-                self.reg_a = self.mem.borrow_mut().read((z|z2<<8) as usize);
+                self.reg_a = memory.borrow_mut().read((z|z2<<8) as usize);
                 mcycles = 4;
             },
             0xEA => {
-                let z:u16 = self.mem.borrow_mut().read(self.pc as usize) as u16;
+                let z:u16 = memory.borrow_mut().read(self.pc as usize) as u16;
                 self.pc += 1;
-                let z2:u16 = self.mem.borrow_mut().read(self.pc as usize) as u16;
+                let z2:u16 = memory.borrow_mut().read(self.pc as usize) as u16;
                 self.pc += 1;
-                self.mem.borrow_mut().write((z|z2<<8) as usize, self.reg_a);
+                memory.borrow_mut().write((z|z2<<8) as usize, self.reg_a);
                 mcycles = 4;
             },
 
             0xF2 => {
-                let z:u8 = self.mem.borrow_mut().read((0xFF00|(self.reg_c as u16)) as usize);
+                let z:u8 = memory.borrow_mut().read((0xFF00|(self.reg_c as u16)) as usize);
                 self.reg_a = z;
                 mcycles = 2;
             },
             0xE2 => {
-                self.mem.borrow_mut().write((0xFF00|self.reg_c as u16) as usize, self.reg_a);
+                memory.borrow_mut().write((0xFF00|self.reg_c as u16) as usize, self.reg_a);
                 mcycles = 2;
             },
 
             0xF0 => {
-                let z:u8 = self.mem.borrow_mut().read((0xFF00|(self.pc as u16)) as usize);
+                let z:u8 = memory.borrow_mut().read((0xFF00|(self.pc as u16)) as usize);
                 self.pc += 1;
                 self.reg_a = z;
                 mcycles = 3;
             },
             0xE0 => {
-                let z:u8 = self.mem.borrow_mut().read((0xFF00|(self.pc as u16)) as usize);
+                let z:u8 = memory.borrow_mut().read((0xFF00|(self.pc as u16)) as usize);
                 self.pc += 1;
-                self.mem.borrow_mut().write((0xFF00|(z as u16)) as usize, self.reg_a);
+                memory.borrow_mut().write((0xFF00|(z as u16)) as usize, self.reg_a);
                 mcycles = 3;
             },
 
             0x3A => {
-                let z:u8 = self.mem.borrow_mut().read(self.get_hl() as usize);
+                let z:u8 = memory.borrow_mut().read(self.get_hl() as usize);
                 self.reg_a = z;
                 self.set_hl(self.get_hl()-1);
                 mcycles = 2;
             },
             0x32 => {
-                self.mem.borrow_mut().write(self.get_hl() as usize, self.reg_a);
+                memory.borrow_mut().write(self.get_hl() as usize, self.reg_a);
                 self.set_hl(self.get_hl()-1);
                 mcycles = 2;
             },
 
             0x2A => {
-                let z:u8 = self.mem.borrow_mut().read(self.get_hl() as usize);
+                let z:u8 = memory.borrow_mut().read(self.get_hl() as usize);
                 self.reg_a = z;
                 self.set_hl(self.get_hl()+1);
                 mcycles = 2;
             },
             0x22 => {
-                self.mem.borrow_mut().write(self.get_hl() as usize, self.reg_a);
+                memory.borrow_mut().write(self.get_hl() as usize, self.reg_a);
                 self.set_hl(self.get_hl()+1);
                 mcycles = 2;
             },
 
             0x01 => {
-                let z:u16 = self.mem.borrow_mut().read(self.pc as usize) as u16;
+                let z:u16 = memory.borrow_mut().read(self.pc as usize) as u16;
                 self.pc += 1;
-                let z2:u16 = self.mem.borrow_mut().read(self.pc as usize) as u16;
+                let z2:u16 = memory.borrow_mut().read(self.pc as usize) as u16;
                 self.pc += 1;
                 self.set_bc(z|(z2<<8));
                 mcycles = 3;
             },
             0x11 => {
-                let z:u16 = self.mem.borrow_mut().read(self.pc as usize) as u16;
+                let z:u16 = memory.borrow_mut().read(self.pc as usize) as u16;
                 self.pc += 1;
-                let z2:u16 = self.mem.borrow_mut().read(self.pc as usize) as u16;
+                let z2:u16 = memory.borrow_mut().read(self.pc as usize) as u16;
                 self.pc += 1;
                 self.set_de(z|z2<<8);
                 mcycles = 3;
             },
             0x21 => {
-                let z:u16 = self.mem.borrow_mut().read(self.pc as usize) as u16;
+                let z:u16 = memory.borrow_mut().read(self.pc as usize) as u16;
                 self.pc += 1;
-                let z2:u16 = self.mem.borrow_mut().read(self.pc as usize) as u16;
+                let z2:u16 = memory.borrow_mut().read(self.pc as usize) as u16;
                 self.pc += 1;
                 self.set_hl(z|z2<<8);
                 mcycles = 3;
             },
 
             0x08 => {
-                let z:u16 = self.mem.borrow_mut().read(self.pc as usize) as u16;
+                let z:u16 = memory.borrow_mut().read(self.pc as usize) as u16;
                 self.pc += 1;
-                let z2:u16 = self.mem.borrow_mut().read(self.pc as usize) as u16;
+                let z2:u16 = memory.borrow_mut().read(self.pc as usize) as u16;
                 self.pc += 1;
-                self.mem.borrow_mut().write((z|z2<<8) as usize, (self.sp&0xff) as u8);
-                self.mem.borrow_mut().write((z|z2<<8) as usize+1, (self.sp>>8) as u8);
+                memory.borrow_mut().write((z|z2<<8) as usize, (self.sp&0xff) as u8);
+                memory.borrow_mut().write((z|z2<<8) as usize+1, (self.sp>>8) as u8);
                 mcycles = 5;
             },
             0xF9 => {
@@ -655,7 +672,7 @@ impl CPU{
 
             // might not be implemented correctly so gotta check later
             0xF8 => {
-                let z:i8 = self.mem.borrow_mut().read(self.pc as usize) as i8;
+                let z:i8 = memory.borrow_mut().read(self.pc as usize) as i8;
                 self.pc += 1;
                 let result = self.sp.wrapping_add(z as u16);
                 self.set_hl(result);
@@ -696,13 +713,13 @@ impl CPU{
             },
             0x86 => {
                 let hl = self.get_hl();
-                let value = self.mem.borrow_mut().read(hl as usize);
+                let value = memory.borrow_mut().read(hl as usize);
                 self.add(value);
                 mcycles = 2;
             },
 
             0xC6 => {
-                let z:u8 = self.mem.borrow_mut().read(self.pc as usize);
+                let z:u8 = memory.borrow_mut().read(self.pc as usize);
                 self.pc += 1;
                 self.add(z);
                 mcycles = 2;
@@ -738,13 +755,13 @@ impl CPU{
             },
 
             0x8E => {
-                let val = self.mem.borrow_mut().read(self.get_hl() as usize);
+                let val = memory.borrow_mut().read(self.get_hl() as usize);
                 self.add_carry(val);
                 mcycles = 2;
             },
 
             0xCE => {
-                let z:u8 = self.mem.borrow_mut().read(self.pc as usize);
+                let z:u8 = memory.borrow_mut().read(self.pc as usize);
                 self.pc += 1;
                 self.add_carry(z);
                 mcycles = 2;
@@ -781,13 +798,13 @@ impl CPU{
 
             0x96 => {
                 let hl = self.get_hl() as usize;
-                let val = self.mem.borrow_mut().read(hl);
+                let val = memory.borrow_mut().read(hl);
                 self.sub(val);
                 mcycles = 2;
             },
 
             0xD6 => {
-                let z:u8 = self.mem.borrow_mut().read(self.pc as usize);
+                let z:u8 = memory.borrow_mut().read(self.pc as usize);
                 self.pc += 1;
                 self.sub(z);
                 mcycles = 2;
@@ -824,12 +841,12 @@ impl CPU{
 
             0x9E => {
                 let hl = self.get_hl() as usize;
-                let val = self.mem.borrow_mut().read(hl);
+                let val = memory.borrow_mut().read(hl);
                 self.sub_carry(val);
                 mcycles = 2;
             },
             0xDE => {
-                let z:u8 = self.mem.borrow_mut().read(self.pc as usize);
+                let z:u8 = memory.borrow_mut().read(self.pc as usize);
                 self.pc += 1;
                 self.sub_carry(z);
                 mcycles = 2;
@@ -865,12 +882,12 @@ impl CPU{
             },
             0xBE => {
                 let hl = self.get_hl() as usize;
-                let val = self.mem.borrow_mut().read(hl);
+                let val = memory.borrow_mut().read(hl);
                 self.compare(val);
                 mcycles = 2;
             },
             0xFE => {
-                let z:u8 = self.mem.borrow_mut().read(self.pc as usize);
+                let z:u8 = memory.borrow_mut().read(self.pc as usize);
                 self.pc += 1;
                 self.compare(z);
                 mcycles = 2;
@@ -905,9 +922,9 @@ impl CPU{
                 mcycles = 1;
             },
             0x34 => {
-                let z = self.mem.borrow_mut().read(self.get_hl() as usize);
+                let z = memory.borrow_mut().read(self.get_hl() as usize);
                 let result = self.increment(z);
-                self.mem.borrow_mut().write(self.get_hl() as usize, result);
+                memory.borrow_mut().write(self.get_hl() as usize, result);
                 mcycles = 3;
             },
             0x05 => {
@@ -939,9 +956,9 @@ impl CPU{
                 mcycles = 1;
             },
             0x35 => {
-                let z = self.mem.borrow_mut().read(self.get_hl() as usize);
+                let z = memory.borrow_mut().read(self.get_hl() as usize);
                 let result = self.decrement(z);
-                self.mem.borrow_mut().write(self.get_hl() as usize, result);
+                memory.borrow_mut().write(self.get_hl() as usize, result);
                 mcycles = 3;
             },
 
@@ -975,12 +992,12 @@ impl CPU{
             },
             0xA6 => {
                 let hl = self.get_hl() as usize;
-                let val = self.mem.borrow_mut().read(hl);
+                let val = memory.borrow_mut().read(hl);
                 self.and(val);
                 mcycles = 2;
             },
             0xE6 => {
-                let z:u8 = self.mem.borrow_mut().read(self.pc as usize);
+                let z:u8 = memory.borrow_mut().read(self.pc as usize);
                 self.pc += 1;
                 self.and(z);
                 mcycles = 2;
@@ -1016,12 +1033,12 @@ impl CPU{
             },
             0xB6 => {
                 let hl = self.get_hl() as usize;
-                let val = self.mem.borrow_mut().read(hl);
+                let val = memory.borrow_mut().read(hl);
                 self.or(val);
                 mcycles = 2;
             },
             0xF6 => {
-                let z:u8 = self.mem.borrow_mut().read(self.pc as usize);
+                let z:u8 = memory.borrow_mut().read(self.pc as usize);
                 self.pc += 1;
                 self.or(z);
                 mcycles = 2;
@@ -1057,12 +1074,12 @@ impl CPU{
             },
             0xAE => {
                 let hl = self.get_hl() as usize;
-                let val = self.mem.borrow_mut().read(hl);
+                let val = memory.borrow_mut().read(hl);
                 self.xor(val);
                 mcycles = 2;
             },
             0xEE => {
-                let z:u8 = self.mem.borrow_mut().read(self.pc as usize);
+                let z:u8 = memory.borrow_mut().read(self.pc as usize);
                 self.pc += 1;
                 self.xor(z);
                 mcycles = 2;
@@ -1151,7 +1168,7 @@ impl CPU{
             },
 
             0xE8 => {
-                let z:i8 = self.mem.borrow_mut().read(self.pc as usize) as i8;
+                let z:i8 = memory.borrow_mut().read(self.pc as usize) as i8;
                 self.pc += 1;
                 let result = self.get_hl().wrapping_add(z as u16);
                 self.set_hl(result);
@@ -1187,7 +1204,7 @@ impl CPU{
             },
             // cb instructions (might try to shrink it later cuz code repeated a lot)
             0xCB => {
-                let op2:u8 = self.mem.borrow_mut().read(self.pc as usize);
+                let op2:u8 = memory.borrow_mut().read(self.pc as usize);
                 self.pc += 1;
                 match op2{
                     0x00 => {
@@ -1227,9 +1244,9 @@ impl CPU{
                     },
 
                     0x06 => {
-                        let z = self.mem.borrow_mut().read(self.get_hl() as usize);
+                        let z = memory.borrow_mut().read(self.get_hl() as usize);
                         let result = self.rotate_left_carry(z);
-                        self.mem.borrow_mut().write(self.get_hl() as usize, result);
+                        memory.borrow_mut().write(self.get_hl() as usize, result);
                         self.set_zero(result == 0);
                         mcycles = 4;
                     },
@@ -1270,9 +1287,9 @@ impl CPU{
                         mcycles = 2;
                     },
                     0x0E => {
-                        let z = self.mem.borrow_mut().read(self.get_hl() as usize);
+                        let z = memory.borrow_mut().read(self.get_hl() as usize);
                         let result = self.rotate_right_carry(z);
-                        self.mem.borrow_mut().write(self.get_hl() as usize, result);
+                        memory.borrow_mut().write(self.get_hl() as usize, result);
                         self.set_zero(result == 0);
                         mcycles = 4;
                     },
@@ -1312,9 +1329,9 @@ impl CPU{
                         mcycles = 2;
                     },
                     0x16 => {
-                        let z = self.mem.borrow_mut().read(self.get_hl() as usize);
+                        let z = memory.borrow_mut().read(self.get_hl() as usize);
                         let result = self.rotate_left(z);
-                        self.mem.borrow_mut().write(self.get_hl() as usize, result);
+                        memory.borrow_mut().write(self.get_hl() as usize, result);
                         self.set_zero(result == 0);
                         mcycles = 4;
                     },
@@ -1354,9 +1371,9 @@ impl CPU{
                         mcycles = 2;
                     },
                     0x1E => {
-                        let z = self.mem.borrow_mut().read(self.get_hl() as usize);
+                        let z = memory.borrow_mut().read(self.get_hl() as usize);
                         let result = self.rotate_right(z);
-                        self.mem.borrow_mut().write(self.get_hl() as usize, result);
+                        memory.borrow_mut().write(self.get_hl() as usize, result);
                         self.set_zero(result == 0);
                         mcycles = 4;
                     },
@@ -1390,9 +1407,9 @@ impl CPU{
                         mcycles = 2;
                     },
                     0x26 => {
-                        let z = self.mem.borrow_mut().read(self.get_hl() as usize);
+                        let z = memory.borrow_mut().read(self.get_hl() as usize);
                         let result = self.sla(z);
-                        self.mem.borrow_mut().write(self.get_hl() as usize, result);
+                        memory.borrow_mut().write(self.get_hl() as usize, result);
                         mcycles = 4;
                     },
 
@@ -1425,9 +1442,9 @@ impl CPU{
                         mcycles = 2;
                     },
                     0x2E => {
-                        let z = self.mem.borrow_mut().read(self.get_hl() as usize);
+                        let z = memory.borrow_mut().read(self.get_hl() as usize);
                         let result = self.sra(z);
-                        self.mem.borrow_mut().write(self.get_hl() as usize, result);
+                        memory.borrow_mut().write(self.get_hl() as usize, result);
                         mcycles = 4;
                     },
 
@@ -1460,9 +1477,9 @@ impl CPU{
                         mcycles = 2;
                     },
                     0x36 => {
-                        let z = self.mem.borrow_mut().read(self.get_hl() as usize);
+                        let z = memory.borrow_mut().read(self.get_hl() as usize);
                         let result = self.swap(z);
-                        self.mem.borrow_mut().write(self.get_hl() as usize, result);
+                        memory.borrow_mut().write(self.get_hl() as usize, result);
                         mcycles = 4;
                     },
 
@@ -1495,9 +1512,9 @@ impl CPU{
                         mcycles = 2;
                     },
                     0x3E => {
-                        let z = self.mem.borrow_mut().read(self.get_hl() as usize);
+                        let z = memory.borrow_mut().read(self.get_hl() as usize);
                         let result = self.srl(z);
-                        self.mem.borrow_mut().write(self.get_hl() as usize, result);
+                        memory.borrow_mut().write(self.get_hl() as usize, result);
                         mcycles = 4;
                     },
 
@@ -1530,7 +1547,7 @@ impl CPU{
                         mcycles = 2;
                     },
                     0x46 => {
-                        let z = self.mem.borrow_mut().read(self.get_hl() as usize);
+                        let z = memory.borrow_mut().read(self.get_hl() as usize);
                         self.bit(z, 0);
                         mcycles = 3;
                     },
@@ -1563,7 +1580,7 @@ impl CPU{
                         mcycles = 2;
                     },
                     0x4E => {
-                        let z = self.mem.borrow_mut().read(self.get_hl() as usize);
+                        let z = memory.borrow_mut().read(self.get_hl() as usize);
                         self.bit(z, 1);
                         mcycles = 3;
                     },
@@ -1596,7 +1613,7 @@ impl CPU{
                         mcycles = 2;
                     },
                     0x56 => {
-                        let z = self.mem.borrow_mut().read(self.get_hl() as usize);
+                        let z = memory.borrow_mut().read(self.get_hl() as usize);
                         self.bit(z, 2);
                         mcycles = 3;
                     },
@@ -1629,7 +1646,7 @@ impl CPU{
                         mcycles = 2;
                     },
                     0x5E => {
-                        let z = self.mem.borrow_mut().read(self.get_hl() as usize);
+                        let z = memory.borrow_mut().read(self.get_hl() as usize);
                         self.bit(z, 3);
                         mcycles = 3;
                     },
@@ -1662,7 +1679,7 @@ impl CPU{
                         mcycles = 2;
                     },
                     0x66 => {
-                        let z = self.mem.borrow_mut().read(self.get_hl() as usize);
+                        let z = memory.borrow_mut().read(self.get_hl() as usize);
                         self.bit(z, 4);
                         mcycles = 3;
                     },
@@ -1695,7 +1712,7 @@ impl CPU{
                         mcycles = 2;
                     },
                     0x6E => {
-                        let z = self.mem.borrow_mut().read(self.get_hl() as usize);
+                        let z = memory.borrow_mut().read(self.get_hl() as usize);
                         self.bit(z, 5);
                         mcycles = 3;
                     },
@@ -1728,7 +1745,7 @@ impl CPU{
                         mcycles = 2;
                     },
                     0x76 => {
-                        let z = self.mem.borrow_mut().read(self.get_hl() as usize);
+                        let z = memory.borrow_mut().read(self.get_hl() as usize);
                         self.bit(z, 6);
                         mcycles = 3;
                     },
@@ -1761,7 +1778,7 @@ impl CPU{
                         mcycles = 2;
                     },
                     0x7E => {
-                        let z = self.mem.borrow_mut().read(self.get_hl() as usize);
+                        let z = memory.borrow_mut().read(self.get_hl() as usize);
                         self.bit(z, 7);
                         mcycles = 3;
                     },
@@ -1795,9 +1812,9 @@ impl CPU{
                         mcycles = 2;
                     },
                     0x86 => {
-                        let z = self.mem.borrow_mut().read(self.get_hl() as usize);
+                        let z = memory.borrow_mut().read(self.get_hl() as usize);
                         let result = self.res(z, 0);
-                        self.mem.borrow_mut().write(self.get_hl() as usize, result);
+                        memory.borrow_mut().write(self.get_hl() as usize, result);
                         mcycles = 4;
                     },
                     0x88 => {
@@ -1829,9 +1846,9 @@ impl CPU{
                         mcycles = 2;
                     },
                     0x8E => {
-                        let z = self.mem.borrow_mut().read(self.get_hl() as usize);
+                        let z = memory.borrow_mut().read(self.get_hl() as usize);
                         let result = self.res(z, 1);
-                        self.mem.borrow_mut().write(self.get_hl() as usize, result);
+                        memory.borrow_mut().write(self.get_hl() as usize, result);
                         mcycles = 4;
                     },
                     0x90 => {
@@ -1863,9 +1880,9 @@ impl CPU{
                         mcycles = 2;
                     },
                     0x96 => {
-                        let z = self.mem.borrow_mut().read(self.get_hl() as usize);
+                        let z = memory.borrow_mut().read(self.get_hl() as usize);
                         let result = self.res(z, 2);
-                        self.mem.borrow_mut().write(self.get_hl() as usize, result);
+                        memory.borrow_mut().write(self.get_hl() as usize, result);
                         mcycles = 4;
                     },
                     0x98 => {
@@ -1897,9 +1914,9 @@ impl CPU{
                         mcycles = 2;
                     },
                     0x9E => {
-                        let z = self.mem.borrow_mut().read(self.get_hl() as usize);
+                        let z = memory.borrow_mut().read(self.get_hl() as usize);
                         let result = self.res(z, 3);
-                        self.mem.borrow_mut().write(self.get_hl() as usize, result);
+                        memory.borrow_mut().write(self.get_hl() as usize, result);
                         mcycles = 4;
                     },
                     0xA0 => {
@@ -1931,9 +1948,9 @@ impl CPU{
                         mcycles = 2;
                     },
                     0xA6 => {
-                        let z = self.mem.borrow_mut().read(self.get_hl() as usize);
+                        let z = memory.borrow_mut().read(self.get_hl() as usize);
                         let result = self.res(z, 4);
-                        self.mem.borrow_mut().write(self.get_hl() as usize, result);
+                        memory.borrow_mut().write(self.get_hl() as usize, result);
                         mcycles = 4;
                     },
                     0xA8 => {
@@ -1965,9 +1982,9 @@ impl CPU{
                         mcycles = 2;
                     },
                     0xAE => {
-                        let z = self.mem.borrow_mut().read(self.get_hl() as usize);
+                        let z = memory.borrow_mut().read(self.get_hl() as usize);
                         let result = self.res(z, 5);
-                        self.mem.borrow_mut().write(self.get_hl() as usize, result);
+                        memory.borrow_mut().write(self.get_hl() as usize, result);
                         mcycles = 4;
                     },
                     0xB0 => {
@@ -1999,9 +2016,9 @@ impl CPU{
                         mcycles = 2;
                     },
                     0xB6 => {
-                        let z = self.mem.borrow_mut().read(self.get_hl() as usize);
+                        let z = memory.borrow_mut().read(self.get_hl() as usize);
                         let result = self.res(z, 6);
-                        self.mem.borrow_mut().write(self.get_hl() as usize, result);
+                        memory.borrow_mut().write(self.get_hl() as usize, result);
                         mcycles = 4;
                     },
                     0xB8 => {
@@ -2033,9 +2050,9 @@ impl CPU{
                         mcycles = 2;
                     },
                     0xBE => {
-                        let z = self.mem.borrow_mut().read(self.get_hl() as usize);
+                        let z = memory.borrow_mut().read(self.get_hl() as usize);
                         let result = self.res(z, 7);
-                        self.mem.borrow_mut().write(self.get_hl() as usize, result);
+                        memory.borrow_mut().write(self.get_hl() as usize, result);
                         mcycles = 4;
                     },
 
@@ -2068,9 +2085,9 @@ impl CPU{
                         mcycles = 2;
                     },
                     0xC6 => {
-                        let z = self.mem.borrow_mut().read(self.get_hl() as usize);
+                        let z = memory.borrow_mut().read(self.get_hl() as usize);
                         let result = self.set(z, 0);
-                        self.mem.borrow_mut().write(self.get_hl() as usize, result);
+                        memory.borrow_mut().write(self.get_hl() as usize, result);
                         mcycles = 4;
                     },
                     0xC8 => {
@@ -2102,9 +2119,9 @@ impl CPU{
                         mcycles = 2;
                     },
                     0xCE => {
-                        let z = self.mem.borrow_mut().read(self.get_hl() as usize);
+                        let z = memory.borrow_mut().read(self.get_hl() as usize);
                         let result = self.set(z, 1);
-                        self.mem.borrow_mut().write(self.get_hl() as usize, result);
+                        memory.borrow_mut().write(self.get_hl() as usize, result);
                         mcycles = 4;
                     },
                     0xD0 => {
@@ -2136,9 +2153,9 @@ impl CPU{
                         mcycles = 2;
                     },
                     0xD6 => {
-                        let z = self.mem.borrow_mut().read(self.get_hl() as usize);
+                        let z = memory.borrow_mut().read(self.get_hl() as usize);
                         let result = self.set(z, 2);
-                        self.mem.borrow_mut().write(self.get_hl() as usize, result);
+                        memory.borrow_mut().write(self.get_hl() as usize, result);
                         mcycles = 4;
                     },
                     0xD8 => {
@@ -2170,9 +2187,9 @@ impl CPU{
                         mcycles = 2;
                     },
                     0xDE => {
-                        let z = self.mem.borrow_mut().read(self.get_hl() as usize);
+                        let z = memory.borrow_mut().read(self.get_hl() as usize);
                         let result = self.set(z, 3);
-                        self.mem.borrow_mut().write(self.get_hl() as usize, result);
+                        memory.borrow_mut().write(self.get_hl() as usize, result);
                         mcycles = 4;
                     },
                     0xE0 => {
@@ -2204,9 +2221,9 @@ impl CPU{
                         mcycles = 2;
                     },
                     0xE6 => {
-                        let z = self.mem.borrow_mut().read(self.get_hl() as usize);
+                        let z = memory.borrow_mut().read(self.get_hl() as usize);
                         let result = self.set(z, 4);
-                        self.mem.borrow_mut().write(self.get_hl() as usize, result);
+                        memory.borrow_mut().write(self.get_hl() as usize, result);
                         mcycles = 4;
                     },
                     0xE8 => {
@@ -2238,9 +2255,9 @@ impl CPU{
                         mcycles = 2;
                     },
                     0xEE => {
-                        let z = self.mem.borrow_mut().read(self.get_hl() as usize);
+                        let z = memory.borrow_mut().read(self.get_hl() as usize);
                         let result = self.set(z, 5);
-                        self.mem.borrow_mut().write(self.get_hl() as usize, result);
+                        memory.borrow_mut().write(self.get_hl() as usize, result);
                         mcycles = 4;
                     },
                     0xF0 => {
@@ -2272,9 +2289,9 @@ impl CPU{
                         mcycles = 2;
                     },
                     0xF6 => {
-                        let z = self.mem.borrow_mut().read(self.get_hl() as usize);
+                        let z = memory.borrow_mut().read(self.get_hl() as usize);
                         let result = self.set(z, 6);
-                        self.mem.borrow_mut().write(self.get_hl() as usize, result);
+                        memory.borrow_mut().write(self.get_hl() as usize, result);
                         mcycles = 4;
                     },
                     0xF8 => {
@@ -2306,9 +2323,9 @@ impl CPU{
                         mcycles = 2;
                     },
                     0xFE => {
-                        let z = self.mem.borrow_mut().read(self.get_hl() as usize);
+                        let z = memory.borrow_mut().read(self.get_hl() as usize);
                         let result = self.set(z, 7);
-                        self.mem.borrow_mut().write(self.get_hl() as usize, result);
+                        memory.borrow_mut().write(self.get_hl() as usize, result);
                         mcycles = 4;
                     },
 
@@ -2316,8 +2333,8 @@ impl CPU{
             },
 
             0xC3 =>{
-                let low = self.mem.borrow_mut().read(self.pc as usize);
-                let high = self.mem.borrow_mut().read((self.pc + 1) as usize);
+                let low = memory.borrow_mut().read(self.pc as usize);
+                let high = memory.borrow_mut().read((self.pc + 1) as usize);
                 self.pc = ((high as u16) << 8) | (low as u16);
                 mcycles = 4;
             },
@@ -2326,9 +2343,9 @@ impl CPU{
                 mcycles = 1;
             },
             0xC2 =>{
-                let low = self.mem.borrow_mut().read(self.pc as usize);
+                let low = memory.borrow_mut().read(self.pc as usize);
                 self.pc += 1;
-                let high = self.mem.borrow_mut().read(self.pc as usize);
+                let high = memory.borrow_mut().read(self.pc as usize);
                 self.pc += 1;
                 if !self.get_zero() {
                     self.pc = ((high as u16) << 8) | (low as u16);
@@ -2338,9 +2355,9 @@ impl CPU{
                 }
             },
             0xCA => {
-                let low = self.mem.borrow_mut().read(self.pc as usize);
+                let low = memory.borrow_mut().read(self.pc as usize);
                 self.pc += 1;
-                let high = self.mem.borrow_mut().read(self.pc as usize);
+                let high = memory.borrow_mut().read(self.pc as usize);
                 self.pc += 1;
                 if self.get_zero() {
                     self.pc = ((high as u16) << 8) | (low as u16);
@@ -2350,9 +2367,9 @@ impl CPU{
                 }
             },
             0xD2 => {
-                let low = self.mem.borrow_mut().read(self.pc as usize);
+                let low = memory.borrow_mut().read(self.pc as usize);
                 self.pc += 1;
-                let high = self.mem.borrow_mut().read(self.pc as usize);
+                let high = memory.borrow_mut().read(self.pc as usize);
                 self.pc += 1;
                 if !self.get_carry() {
                     self.pc = ((high as u16) << 8) | (low as u16);
@@ -2362,9 +2379,9 @@ impl CPU{
                 }
             },
             0xDA => {
-                let low = self.mem.borrow_mut().read(self.pc as usize);
+                let low = memory.borrow_mut().read(self.pc as usize);
                 self.pc += 1;
-                let high = self.mem.borrow_mut().read(self.pc as usize);
+                let high = memory.borrow_mut().read(self.pc as usize);
                 self.pc += 1;
                 if self.get_carry() {
                     self.pc = ((high as u16) << 8) | (low as u16);
@@ -2375,14 +2392,14 @@ impl CPU{
             },
 
             0x18 => {
-                let offset = self.mem.borrow_mut().read(self.pc as usize) as i8;
+                let offset = memory.borrow_mut().read(self.pc as usize) as i8;
                 self.pc += 1;
                 self.pc = self.pc.wrapping_add(offset as u16);
                 mcycles = 3;
             },
 
             0x20 => {
-                let offset = self.mem.borrow_mut().read(self.pc as usize) as i8;
+                let offset = memory.borrow_mut().read(self.pc as usize) as i8;
                 self.pc += 1;
                 if !self.get_zero() {
                     self.pc = self.pc.wrapping_add(offset as u16);
@@ -2392,7 +2409,7 @@ impl CPU{
                 }
             },
             0x28 => {
-                let offset = self.mem.borrow_mut().read(self.pc as usize) as i8;
+                let offset = memory.borrow_mut().read(self.pc as usize) as i8;
                 self.pc += 1;
                 if self.get_zero() {
                     self.pc = self.pc.wrapping_add(offset as u16);
@@ -2402,7 +2419,7 @@ impl CPU{
                 }
             },
             0x30 => {
-                let offset = self.mem.borrow_mut().read(self.pc as usize) as i8;
+                let offset = memory.borrow_mut().read(self.pc as usize) as i8;
                 self.pc += 1;
                 if !self.get_carry() {
                     self.pc = self.pc.wrapping_add(offset as u16);
@@ -2412,7 +2429,7 @@ impl CPU{
                 }
             },
             0x38 => {
-                let offset = self.mem.borrow_mut().read(self.pc as usize) as i8;
+                let offset = memory.borrow_mut().read(self.pc as usize) as i8;
                 self.pc += 1;
                 if self.get_carry() {
                     self.pc = self.pc.wrapping_add(offset as u16);
@@ -2423,9 +2440,9 @@ impl CPU{
             },
 
             0xCD => {
-                let low = self.mem.borrow_mut().read(self.pc as usize);
+                let low = memory.borrow_mut().read(self.pc as usize);
                 self.pc += 1;
-                let high = self.mem.borrow_mut().read(self.pc as usize);
+                let high = memory.borrow_mut().read(self.pc as usize);
                 self.pc += 1;
                 self.push_stack(self.pc);
                 self.pc = ((high as u16) << 8) | (low as u16);
@@ -2433,9 +2450,9 @@ impl CPU{
             },
 
             0xC4 => {
-                let low = self.mem.borrow_mut().read(self.pc as usize);
+                let low = memory.borrow_mut().read(self.pc as usize);
                 self.pc += 1;
-                let high = self.mem.borrow_mut().read(self.pc as usize);
+                let high = memory.borrow_mut().read(self.pc as usize);
                 self.pc += 1;
                 if !self.get_zero() {
                     self.push_stack(self.pc);
@@ -2446,9 +2463,9 @@ impl CPU{
                 }
             },
             0xCC => {
-                let low = self.mem.borrow_mut().read(self.pc as usize);
+                let low = memory.borrow_mut().read(self.pc as usize);
                 self.pc += 1;
-                let high = self.mem.borrow_mut().read(self.pc as usize);
+                let high = memory.borrow_mut().read(self.pc as usize);
                 self.pc += 1;
                 if self.get_zero() {
                     self.push_stack(self.pc);
@@ -2459,9 +2476,9 @@ impl CPU{
                 }
             },
             0xD4 => {
-                let low = self.mem.borrow_mut().read(self.pc as usize);
+                let low = memory.borrow_mut().read(self.pc as usize);
                 self.pc += 1;
-                let high = self.mem.borrow_mut().read(self.pc as usize);
+                let high = memory.borrow_mut().read(self.pc as usize);
                 self.pc += 1;
                 if !self.get_carry() {
                     self.push_stack(self.pc);
@@ -2472,9 +2489,9 @@ impl CPU{
                 }
             },
             0xDC => {
-                let low = self.mem.borrow_mut().read(self.pc as usize);
+                let low = memory.borrow_mut().read(self.pc as usize);
                 self.pc += 1;
-                let high = self.mem.borrow_mut().read(self.pc as usize);
+                let high = memory.borrow_mut().read(self.pc as usize);
                 self.pc += 1;
                 if self.get_carry() {
                     self.push_stack(self.pc);
@@ -2522,7 +2539,7 @@ impl CPU{
                 }
             },
             0xD9 => {
-                self.interrupt_thing.borrow_mut().set_ime(true);
+                interrupt_handl.borrow_mut().set_ime(true);
                 self.pc = self.pop_stack();
                 mcycles = 4;
             },
@@ -2539,11 +2556,11 @@ impl CPU{
                 mcycles = 1;
             },
             0xF3 => {
-                self.interrupt_thing.borrow_mut().set_ime(false);
+                interrupt_handl.borrow_mut().set_ime(false);
                 mcycles = 1;
             },
             0xFB => {
-                self.interrupt_thing.borrow_mut().set_ime(true);
+                interrupt_handl.borrow_mut().set_ime(true);
                 mcycles = 1;
             },
             // not sure about how to do halt and stop yet

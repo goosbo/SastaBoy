@@ -1,14 +1,15 @@
 use std::cell::RefCell;
-use std::rc::Rc;
+use std::rc::Weak;
 
 use crate::interrupt::InterruptHandlerThing;
 use crate::memory::Mem;
 
+#[derive(Debug)]
 pub struct Timer{
     div_ctr : u16,
     tima_ctr: u16,
-    interrupt_handler: Rc<RefCell<InterruptHandlerThing>>,
-    mem: Rc<RefCell<Mem>>
+    interrupt_handler: Weak<RefCell<InterruptHandlerThing>>,
+    mem: Weak<RefCell<Mem>>
 }
 
 // did not implement obscure timer behaviour and integrate it with the cpu yet
@@ -19,7 +20,7 @@ impl Timer {
     pub const TMA_ADDR: usize = 0xFF06;
     pub const TAC_ADDR: usize = 0xFF07;
 
-    pub fn new(intrrpt: Rc<RefCell<InterruptHandlerThing>>,memm: Rc<RefCell<Mem>>) -> Self{
+    pub fn new(intrrpt: Weak<RefCell<InterruptHandlerThing>>,memm: Weak<RefCell<Mem>>) -> Self{
         Timer{
             div_ctr: 0,
             tima_ctr: 0,
@@ -29,14 +30,16 @@ impl Timer {
     }
 
     pub fn tick(&mut self, mcycles:u8){
+        let memory = self.mem.upgrade().expect("memory manager reference dropped!");
+        let interrupt_handl = self.interrupt_handler.upgrade().expect("Interrupt handler reference dropped!");
         let tcycles = 4*mcycles;
         self.div_ctr = self.div_ctr.wrapping_add(tcycles as u16);
 
-        self.mem.borrow_mut().write(Self::DIV_ADDR, ((self.div_ctr>>8)&0xFF) as u8);
+        memory.borrow_mut().write(Self::DIV_ADDR, ((self.div_ctr>>8)&0xFF) as u8);
 
-        let tac = self.mem.borrow_mut().read(Self::TAC_ADDR);
-        let mut tima = self.mem.borrow_mut().read(Self::TIMA_ADDR);
-        let tma = self.mem.borrow_mut().read(Self::TMA_ADDR);
+        let tac = memory.borrow_mut().read(Self::TAC_ADDR);
+        let mut tima = memory.borrow_mut().read(Self::TIMA_ADDR);
+        let tma = memory.borrow_mut().read(Self::TMA_ADDR);
         if tac & 4 != 0{
             let freq_div = match tac & 3 {
               0 =>  256,
@@ -55,10 +58,10 @@ impl Timer {
                     tima = tima.wrapping_add(1);
                     if tima == 0{
                         tima = tma;
-                        self.interrupt_handler.borrow_mut().req_timer();
+                        interrupt_handl.borrow_mut().req_timer();
                     }
                 }
-                self.mem.borrow_mut().write(Self::TIMA_ADDR, tima);
+                memory.borrow_mut().write(Self::TIMA_ADDR, tima);
             }
 
         }

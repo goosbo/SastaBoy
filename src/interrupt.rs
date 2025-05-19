@@ -1,14 +1,14 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, rc::Weak};
 use crate::memory::Mem;
 #[derive(Debug)]
 pub struct InterruptHandlerThing {
     ime: bool,
-    mem: Rc<RefCell<Mem>> 
+    mem: Weak<RefCell<Mem>> 
 }
 
 #[allow(dead_code)]
 impl InterruptHandlerThing {
-    pub fn new(memm: Rc<RefCell<Mem>>) -> Self{
+    pub fn new(memm: Weak<RefCell<Mem>>) -> Self{
         InterruptHandlerThing{
             ime: false,
             mem: memm
@@ -32,9 +32,15 @@ impl InterruptHandlerThing {
     pub const ISR_JOYPAD_ADDR : u16 = 0x0060;
 
     fn req_intrpt(&self,bit:u8){
-        let mut if_: u8 = self.mem.borrow_mut().read(Self::IF_ADDR);
-        if_ |= bit;
-        self.mem.borrow_mut().write(Self::IF_ADDR, if_);
+        if let Some(memory) = self.mem.upgrade(){
+            let mut if_: u8 = memory.borrow_mut().read(Self::IF_ADDR);
+            if_ |= bit;
+            memory.borrow_mut().write(Self::IF_ADDR, if_);
+        }
+        else {
+            panic!("memory manager reference dropped!");
+        }
+        
     }
 
     pub fn req_vblank(&self){
@@ -62,12 +68,13 @@ impl InterruptHandlerThing {
     }
 
     pub fn check_interrupt(&mut self) -> u16{
+        let memory = self.mem.upgrade().expect("memory manager reference dropped");
         if !self.ime {
             return 0;
         }
 
-        let if_ = self.mem.borrow_mut().read(Self::IF_ADDR);
-        let ie = self.mem.borrow_mut().read(Self::IE_ADDR);
+        let if_ = memory.borrow_mut().read(Self::IF_ADDR);
+        let ie = memory.borrow_mut().read(Self::IE_ADDR);
 
         let enabled_interrupts = if_ & ie;
         if enabled_interrupts == 0{
@@ -75,27 +82,27 @@ impl InterruptHandlerThing {
         }
 
         if enabled_interrupts & Self::VBLANK_BIT != 0{
-            self.mem.borrow_mut().write(Self::IF_ADDR, if_ & !Self::VBLANK_BIT);
+            memory.borrow_mut().write(Self::IF_ADDR, if_ & !Self::VBLANK_BIT);
             self.set_ime(false);
             return Self::ISR_VBLANK_ADDR;
         }
         else if enabled_interrupts & Self::LCD_BIT != 0 {
-            self.mem.borrow_mut().write(Self::IF_ADDR, if_ & !Self::LCD_BIT);
+            memory.borrow_mut().write(Self::IF_ADDR, if_ & !Self::LCD_BIT);
             self.set_ime(false);
             return Self::ISR_LCD_ADDR;
         }
         else if enabled_interrupts & Self::TIMER_BIT != 0 {
-            self.mem.borrow_mut().write(Self::IF_ADDR, if_ & !Self::TIMER_BIT);
+            memory.borrow_mut().write(Self::IF_ADDR, if_ & !Self::TIMER_BIT);
             self.set_ime(false);
             return Self::ISR_TIMER_ADDR;
         }
         else if enabled_interrupts & Self::SERIAL_LINK_BIT != 0 {
-            self.mem.borrow_mut().write(Self::IF_ADDR, if_ & !Self::SERIAL_LINK_BIT);
+            memory.borrow_mut().write(Self::IF_ADDR, if_ & !Self::SERIAL_LINK_BIT);
             self.set_ime(false);
             return Self::ISR_SERIAL_LINK_ADDR;
         }
         else if enabled_interrupts & Self::JOYPAD_BIT != 0 {
-            self.mem.borrow_mut().write(Self::IF_ADDR, if_ & !Self::JOYPAD_BIT);
+            memory.borrow_mut().write(Self::IF_ADDR, if_ & !Self::JOYPAD_BIT);
             self.set_ime(false);
             return Self::ISR_JOYPAD_ADDR;
         }
