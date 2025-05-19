@@ -7,22 +7,22 @@ use crate::memory::Mem;
 use crate::timer::Timer;
 
 #[derive(Debug)]
-pub struct GBA {
+pub struct SastaBoy {
     pub cpu: Rc<RefCell<CPU>>,
     interrupt_handler: Rc<RefCell<InterruptHandlerThing>>,
     mem: Rc<RefCell<Mem>>,
     timer: Rc<RefCell<Timer>>
 }
 
-impl GBA {
+impl SastaBoy {
     pub fn new() -> Self{
         let mem = Rc::new(RefCell::new(Mem::new(Weak::new())));
         let interrupt_handler = Rc::new(RefCell::new(InterruptHandlerThing::new(Rc::downgrade(&mem))));
-        let timer = Rc::new(RefCell::new(Timer::new(Rc::downgrade(&interrupt_handler),Rc::downgrade(&mem))));
+        let timer = Rc::new(RefCell::new(Timer::new(Rc::downgrade(&interrupt_handler))));
         mem.borrow_mut().timer = Rc::downgrade(&timer);
         let cpu = Rc::new(RefCell::new(CPU::new(Rc::downgrade(&mem), Rc::downgrade(&interrupt_handler))));
 
-        GBA { 
+        SastaBoy { 
             cpu: cpu,
             interrupt_handler: interrupt_handler,
             mem: mem,
@@ -32,6 +32,6 @@ impl GBA {
 
     pub fn run(&self){
         // temporary
-        self.cpu.borrow_mut().run_opcode(4);
+        self.cpu.borrow_mut().run_opcode(0xFB);
     }
 }

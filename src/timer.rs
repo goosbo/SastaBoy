@@ -2,14 +2,16 @@ use std::cell::RefCell;
 use std::rc::Weak;
 
 use crate::interrupt::InterruptHandlerThing;
-use crate::memory::Mem;
 
 #[derive(Debug)]
 pub struct Timer{
     div_ctr : u16,
-    tima_ctr: u16,
+    pub tma: u8,
+    pub tac: u8,
+    pub tima: u8,
     interrupt_handler: Weak<RefCell<InterruptHandlerThing>>,
-    mem: Weak<RefCell<Mem>>
+    tima_overflow_pending: bool,
+    tima_overflow_tcycles: u8
 }
 
 // did not implement obscure timer behaviour and integrate it with the cpu yet
@@ -20,50 +22,98 @@ impl Timer {
     pub const TMA_ADDR: usize = 0xFF06;
     pub const TAC_ADDR: usize = 0xFF07;
 
-    pub fn new(intrrpt: Weak<RefCell<InterruptHandlerThing>>,memm: Weak<RefCell<Mem>>) -> Self{
+    pub fn new(intrrpt: Weak<RefCell<InterruptHandlerThing>>) -> Self{
         Timer{
             div_ctr: 0,
-            tima_ctr: 0,
             interrupt_handler: intrrpt,
-            mem: memm
+            tima: 0,
+            tma: 0,
+            tac: 0,
+            tima_overflow_pending: false,
+            tima_overflow_tcycles: 0
         }
     }
 
+    pub fn get_div(&self) -> u8{
+        ((self.div_ctr>>8)&0xFF) as u8
+    }
+
+    pub fn write_div(&mut self){
+        let interrupt_handl = self.interrupt_handler.upgrade().expect("Interrupt handler reference dropped!");
+        let old_and_result = self.and_result();
+        self.div_ctr = 0;
+        let new_and_result = self.and_result();
+        if self.tac & 4 != 0 && old_and_result && !new_and_result && !self.tima_overflow_pending{
+            self.tima = self.tima.wrapping_add(1);
+            if self.tima == 0{
+                self.tima = self.tma;
+                interrupt_handl.borrow_mut().req_timer();
+            }
+        }
+    }
+
+    pub fn write_tac(&mut self,val:u8){
+        let interrupt_handl = self.interrupt_handler.upgrade().expect("Interrupt handler reference dropped!");
+        let old_enable = self.tac & 4 != 0;
+        let old_and_result = self.and_result();
+        self.tac = val;
+        let new_and_result = self.and_result();
+
+        if old_enable && old_and_result && !new_and_result && !self.tima_overflow_pending{
+            self.tima = self.tima.wrapping_add(1);
+            if self.tima == 0{
+                self.tima = self.tma;
+                interrupt_handl.borrow_mut().req_timer();
+            }
+        }
+    }
+
+    pub fn write_tima(&mut self,val: u8){
+        self.tima = val;
+        if self.tima_overflow_pending{
+            self.tima_overflow_pending = false;
+            self.tima_overflow_tcycles = 0;
+        }
+    }
+
+    fn and_result(&self)-> bool{
+        let bit: u8 = match self.tac & 3 {
+            0 => 9,
+            1 => 3,
+            2 => 5,
+            3 => 7,
+            _ => unreachable!()
+        };
+        return ((self.div_ctr >> bit)&1)&(((self.tac as u16 &0x4)>>2)&1) != 0
+    }
+
     pub fn tick(&mut self, mcycles:u8){
-        let memory = self.mem.upgrade().expect("memory manager reference dropped!");
         let interrupt_handl = self.interrupt_handler.upgrade().expect("Interrupt handler reference dropped!");
         let tcycles = 4*mcycles;
-        self.div_ctr = self.div_ctr.wrapping_add(tcycles as u16);
 
-        memory.borrow_mut().write(Self::DIV_ADDR, ((self.div_ctr>>8)&0xFF) as u8);
+        for _ in 0..tcycles{
+            let old_and_result = self.and_result();
+            self.div_ctr = self.div_ctr.wrapping_add(1);
+            
+            let new_and_result = self.and_result();
 
-        let tac = memory.borrow_mut().read(Self::TAC_ADDR);
-        let mut tima = memory.borrow_mut().read(Self::TIMA_ADDR);
-        let tma = memory.borrow_mut().read(Self::TMA_ADDR);
-        if tac & 4 != 0{
-            let freq_div = match tac & 3 {
-              0 =>  256,
-              1 => 4,
-              2 => 16,
-              3 => 64,
-              _ => unreachable!()
-            };
-            self.tima_ctr = self.tima_ctr.wrapping_add(mcycles as u16);
-            let inc = self.tima_ctr/freq_div;
-
-            if inc > 0{
-                self.tima_ctr %= freq_div;
-
-                for _ in 0..inc{
-                    tima = tima.wrapping_add(1);
-                    if tima == 0{
-                        tima = tma;
-                        interrupt_handl.borrow_mut().req_timer();
-                    }
-                }
-                memory.borrow_mut().write(Self::TIMA_ADDR, tima);
+            if self.tima_overflow_pending{
+                self.tima_overflow_tcycles -= 1;
             }
 
+            if self.tima_overflow_tcycles == 0{
+                self.tima = self.tma;
+                self.tima_overflow_pending = false;
+                interrupt_handl.borrow_mut().req_timer();
+            }
+            if self.tac & 4 != 0 && old_and_result && !new_and_result && !self.tima_overflow_pending{
+                self.tima = self.tima.wrapping_add(1);
+                if self.tima == 0{
+                    self.tima_overflow_pending = true;
+                    self.tima_overflow_tcycles = 4;
+                }
+            }
         }
+        
     }
 }
