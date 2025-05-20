@@ -15,9 +15,10 @@ pub struct CPU {
     reg_h: u8,
     reg_l: u8,
     sp: u16,
-    pc: u16,
+    pub pc: u16,
     // made them use smart pointers
-    is_halted: bool,
+    pub is_halted: bool,
+    pub is_halt_bug: bool,
     mem: Weak<RefCell<Mem>>,
     interrupt_thing: Weak<RefCell<InterruptHandlerThing>>,
     
@@ -39,6 +40,7 @@ impl CPU{
             interrupt_thing: intrrpt,
             mem: memm,
             is_halted: false,
+            is_halt_bug: false
         }
 
     }
@@ -125,7 +127,7 @@ impl CPU{
     }
 
     // helper functions to handle instructions
-   fn push_stack(&mut self, val:u16){
+   pub fn push_stack(&mut self, val:u16){
         if let Some(memory) = self.mem.upgrade(){
             self.sp -= 2;
             memory.borrow_mut().write(self.sp as usize, (val&0xff) as u8);
@@ -136,7 +138,7 @@ impl CPU{
         }
         
     }
-    fn pop_stack(&mut self) -> u16{
+    pub fn pop_stack(&mut self) -> u16{
         let val;
         
         if let Some(memory) = self.mem.upgrade(){
@@ -333,6 +335,27 @@ impl CPU{
     fn set(&mut self, val:u8, bit:u8) -> u8{
         let result = val | (1<<bit);
         return result
+    }
+
+    pub fn execute(&mut self) ->u8{
+        let memory = self.mem.upgrade().expect("memory manager reference dropped!");
+        let interrupt_handl = self.interrupt_thing.upgrade().expect("interrupt handler reference dropped!");
+        let opcode = memory.borrow_mut().read(self.pc as usize);
+        self.pc += 1;
+        if self.is_halt_bug{
+            self.is_halt_bug = false;
+            self.pc -= 1;
+            return self.run_opcode(opcode);
+        }
+        else if self.is_halted && !interrupt_handl.borrow_mut().interrupt_requested(){
+            return 1;
+        }
+        else if self.is_halted {//interrupts requested
+            self.is_halted = false;
+            return 1;
+        }
+
+        self.run_opcode(opcode)
     }
     
     pub fn run_opcode(&mut self,op:u8) -> u8{
@@ -2552,7 +2575,12 @@ impl CPU{
                 mcycles = 1;
             },
             0x76 => {
-                self.is_halted = true;
+                if !interrupt_handl.borrow().ime && interrupt_handl.borrow_mut().interrupt_requested(){
+                    self.is_halt_bug = true;
+                }
+                else{
+                    self.is_halted = true;
+                }
                 mcycles = 1;
             },
             0xF3 => {
@@ -2563,10 +2591,12 @@ impl CPU{
                 interrupt_handl.borrow_mut().set_ime(true);
                 mcycles = 1;
             },
-            // not sure about how to do halt and stop yet
+            0x10 => {// made stop be like nop cuz apparently most emulators implement it like this?
+                self.pc += 1;
+                mcycles = 1;
+            }
             _ => ()
         }
-        //self.pc += 1;
         return mcycles
     }
 

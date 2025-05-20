@@ -31,7 +31,16 @@ impl SastaBoy {
     }
 
     pub fn run(&self){
-        // temporary
-        self.cpu.borrow_mut().run_opcode(0xFB);
+
+        loop{
+            let mut mcycles = self.cpu.borrow_mut().execute();
+            let interrupt_isr = self.interrupt_handler.borrow_mut().check_interrupt();
+            if interrupt_isr != 0{
+                self.cpu.borrow_mut().push_stack(self.cpu.borrow().pc);
+                self.cpu.borrow_mut().pc = interrupt_isr;
+                mcycles += 5;
+            }
+            self.timer.borrow_mut().tick(mcycles);
+        }
     }
 }

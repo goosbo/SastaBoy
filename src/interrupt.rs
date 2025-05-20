@@ -2,7 +2,7 @@ use std::{cell::RefCell, rc::Weak};
 use crate::memory::Mem;
 #[derive(Debug)]
 pub struct InterruptHandlerThing {
-    ime: bool,
+    pub ime: bool,
     mem: Weak<RefCell<Mem>> 
 }
 
@@ -65,6 +65,16 @@ impl InterruptHandlerThing {
 
     pub fn set_ime(&mut self,set_value:bool){
         self.ime = set_value;
+    }
+
+    pub fn interrupt_requested(&mut self)-> bool{
+        let memory = self.mem.upgrade().expect("memory manager reference dropped");
+
+        let if_ = memory.borrow_mut().read(Self::IF_ADDR);
+        let ie = memory.borrow_mut().read(Self::IE_ADDR);
+
+        let enabled_interrupts = (if_ & ie) != 0;
+        enabled_interrupts
     }
 
     pub fn check_interrupt(&mut self) -> u16{
