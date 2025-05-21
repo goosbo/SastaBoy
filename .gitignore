@@ -1,1 +1,4 @@
 /target
+/test_roms
+/gameboy_cpu.log
+/gameboy_doctor.log

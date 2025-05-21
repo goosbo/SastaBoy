@@ -1,6 +1,5 @@
 use std::cell::RefCell;
 use std::rc::Weak;
-
 use crate::interrupt::InterruptHandlerThing;
 use crate::memory::Mem;
 
@@ -27,20 +26,20 @@ pub struct CPU {
 impl CPU{
     pub fn new(memm : Weak<RefCell<Mem>>,intrrpt: Weak<RefCell<InterruptHandlerThing>>) -> Self{
         CPU{
-            reg_a: 0,
-            reg_b: 0,
-            reg_c: 0,
-            reg_d: 0,
-            reg_e: 0,
-            reg_f: 0,
-            reg_h: 0,
-            reg_l: 0,
-            sp: 0,
-            pc: 0,
+            reg_a: 0x01,
+            reg_b: 0x00,
+            reg_c: 0x13,
+            reg_d: 0x00,
+            reg_e: 0xd8,
+            reg_f: 0xb0,
+            reg_h: 0x01,
+            reg_l: 0x4d,
+            sp: 0xFFFE,
+            pc: 0x0100,
             interrupt_thing: intrrpt,
             mem: memm,
             is_halted: false,
-            is_halt_bug: false
+            is_halt_bug: false,
         }
 
     }
@@ -50,7 +49,7 @@ impl CPU{
     }
 
     fn set_af(&mut self,val:u16) {
-        self.reg_a = (val&0xff00>>8) as u8;
+        self.reg_a = ((val&0xff00)>>8) as u8;
         self.reg_f = (val&0xff) as u8
     }
 
@@ -59,7 +58,7 @@ impl CPU{
     }
 
     fn set_bc(&mut self,val:u16) {
-        self.reg_b = (val&0xff00>>8) as u8;
+        self.reg_b = ((val&0xff00)>>8) as u8;
         self.reg_c = (val&0xff) as u8
     }
 
@@ -68,7 +67,7 @@ impl CPU{
     }
 
     fn set_de(&mut self,val:u16) {
-        self.reg_d = (val&0xff00>>8) as u8;
+        self.reg_d = ((val&0xff00)>>8) as u8;
         self.reg_e = (val&0xff) as u8
     }
 
@@ -77,7 +76,7 @@ impl CPU{
     }
 
     fn set_hl(&mut self,val:u16) {
-        self.reg_h = (val&0xff00>>8) as u8;
+        self.reg_h = ((val&0xff00)>>8) as u8;
         self.reg_l = (val&0xff) as u8
     }
 
@@ -130,8 +129,9 @@ impl CPU{
    pub fn push_stack(&mut self, val:u16){
         if let Some(memory) = self.mem.upgrade(){
             self.sp -= 2;
-            memory.borrow_mut().write(self.sp as usize, (val&0xff) as u8);
-            memory.borrow_mut().write((self.sp+1) as usize, (val>>8) as u8);
+            let mut mem_ref = memory.borrow_mut();
+            mem_ref.write(self.sp as usize, (val&0xff) as u8);
+            mem_ref.write((self.sp+1) as usize, (val>>8) as u8);
         }
         else{
             panic!("memory manager reference dropped!");
@@ -142,7 +142,8 @@ impl CPU{
         let val;
         
         if let Some(memory) = self.mem.upgrade(){
-            val = (memory.borrow_mut().read(self.sp as usize) as u16) | ((memory.borrow_mut().read((self.sp+1) as usize) as u16)<<8);
+            let memref = memory.borrow();
+            val = (memref.read(self.sp as usize) as u16) | ((memref.read((self.sp+1) as usize) as u16)<<8);
             self.sp += 2;
         }
         else {
@@ -217,7 +218,7 @@ impl CPU{
     fn and(&mut self, val:u8){
         let result = self.reg_a & val;
         self.set_zero(result == 0);
-        self.set_neg(true);
+        self.set_neg(false);
         self.set_halfcarry(true);
         self.set_carry(false);
         self.reg_a = result;
@@ -338,8 +339,18 @@ impl CPU{
     }
 
     pub fn execute(&mut self) ->u8{
+        
         let memory = self.mem.upgrade().expect("memory manager reference dropped!");
         let interrupt_handl = self.interrupt_thing.upgrade().expect("interrupt handler reference dropped!");
+
+         log::debug!("A:{:02X} F:{:02X} B:{:02X} C:{:02X} D:{:02X} E:{:02X} H:{:02X} L:{:02X} SP:{:04X} PC:{:04X} PCMEM:{:02X},{:02X},{:02X},{:02X}",
+        self.reg_a, self.reg_f, self.reg_b, self.reg_c, 
+        self.reg_d, self.reg_e, self.reg_h, self.reg_l,
+        self.sp, self.pc, 
+        memory.borrow().read(self.pc as usize),
+        memory.borrow().read((self.pc + 1) as usize),
+        memory.borrow().read((self.pc + 2) as usize),
+        memory.borrow().read((self.pc + 3) as usize));
         let opcode = memory.borrow_mut().read(self.pc as usize);
         self.pc += 1;
         if self.is_halt_bug{
@@ -458,6 +469,7 @@ impl CPU{
             0x3E => {
                 let z: u8 = memory.borrow_mut().read(self.pc as usize);
                 self.pc += 1;
+                
                 self.reg_a = z;
                 mcycles = 2;
             },
@@ -580,39 +592,40 @@ impl CPU{
             },
 
             0xF0 => {
-                let z:u8 = memory.borrow_mut().read((0xFF00|(self.pc as u16)) as usize);
+                let offset:u8 = memory.borrow_mut().read(self.pc as  usize);
                 self.pc += 1;
+                let z:u8 = memory.borrow_mut().read((0xFF00|(offset as u16)) as usize);
                 self.reg_a = z;
                 mcycles = 3;
             },
             0xE0 => {
-                let z:u8 = memory.borrow_mut().read((0xFF00|(self.pc as u16)) as usize);
-                self.pc += 1;
-                memory.borrow_mut().write((0xFF00|(z as u16)) as usize, self.reg_a);
+                let offset:u8 = memory.borrow_mut().read(self.pc as  usize);
+                self.pc += 1;                
+                memory.borrow_mut().write((0xFF00|(offset as u16)) as usize, self.reg_a);
                 mcycles = 3;
             },
 
             0x3A => {
                 let z:u8 = memory.borrow_mut().read(self.get_hl() as usize);
                 self.reg_a = z;
-                self.set_hl(self.get_hl()-1);
+                self.set_hl(self.get_hl().wrapping_sub(1));
                 mcycles = 2;
             },
             0x32 => {
                 memory.borrow_mut().write(self.get_hl() as usize, self.reg_a);
-                self.set_hl(self.get_hl()-1);
+                self.set_hl(self.get_hl().wrapping_sub(1));
                 mcycles = 2;
             },
 
             0x2A => {
                 let z:u8 = memory.borrow_mut().read(self.get_hl() as usize);
                 self.reg_a = z;
-                self.set_hl(self.get_hl()+1);
+                self.set_hl(self.get_hl().wrapping_add(1));
                 mcycles = 2;
             },
             0x22 => {
                 memory.borrow_mut().write(self.get_hl() as usize, self.reg_a);
-                self.set_hl(self.get_hl()+1);
+                self.set_hl(self.get_hl().wrapping_add(1));
                 mcycles = 2;
             },
 
@@ -629,7 +642,7 @@ impl CPU{
                 self.pc += 1;
                 let z2:u16 = memory.borrow_mut().read(self.pc as usize) as u16;
                 self.pc += 1;
-                self.set_de(z|z2<<8);
+                self.set_de(z|(z2<<8));
                 mcycles = 3;
             },
             0x21 => {
@@ -637,8 +650,16 @@ impl CPU{
                 self.pc += 1;
                 let z2:u16 = memory.borrow_mut().read(self.pc as usize) as u16;
                 self.pc += 1;
-                self.set_hl(z|z2<<8);
+                self.set_hl(z|(z2<<8));
                 mcycles = 3;
+            },
+             0x31 => {
+                let z:u16 = memory.borrow_mut().read(self.pc as usize) as u16;
+                self.pc += 1;
+                let z2:u16 = memory.borrow_mut().read(self.pc as usize) as u16;
+                self.pc += 1;
+                self.sp = z|(z2<<8);
+                mcycles = 4;
             },
 
             0x08 => {
@@ -701,8 +722,8 @@ impl CPU{
                 self.set_hl(result);
                 self.set_zero(false);
                 self.set_neg(false);
-                self.set_halfcarry((self.sp&0x0F) + (z as u16&0x0F) > 0x0F);
-                self.set_carry((self.sp&0xFF) + (z as u16&0xFF) > 0xFF);
+                self.set_halfcarry((self.sp&0x0F).wrapping_add(z as u16&0x0F) > 0x0F);
+                self.set_carry((self.sp&0xFF) .wrapping_add(z as u16&0xFF) > 0xFF);
                 mcycles = 3;
             },
 
@@ -1124,7 +1145,7 @@ impl CPU{
             0x27 =>{
                 let mut offset:u8 = 0;
                 let mut carry = false;
-                if (!self.get_neg() && self.reg_a & 0x0F > 0x09) || self.get_halfcarry() {
+                if (!self.get_neg() && self.reg_a & 0x0F > 0x09) || self.get_halfcarry(){
                     offset |= 0x06;
                 } 
                 if(!self.get_neg() && self.reg_a > 0x99) || self.get_carry() {
@@ -1152,28 +1173,28 @@ impl CPU{
             },
 
             0x03 =>{
-                self.set_bc(self.get_bc()+1);
+                self.set_bc(self.get_bc().wrapping_add(1));
                 mcycles = 2; 
             },
             0x13 =>{
-                self.set_de(self.get_de()+1);
+                self.set_de(self.get_de().wrapping_add(1));
                 mcycles = 2; 
             },
             0x23 =>{
-                self.set_hl(self.get_hl()+1);
+                self.set_hl(self.get_hl().wrapping_add(1));
                 mcycles = 2; 
             },
 
             0x0B =>{
-                self.set_bc(self.get_bc()-1);
+                self.set_bc(self.get_bc().wrapping_sub(1));
                 mcycles = 2; 
             },
             0x1B =>{
-                self.set_de(self.get_de()-1);
+                self.set_de(self.get_de().wrapping_sub(1));
                 mcycles = 2; 
             },
             0x2B =>{
-                self.set_hl(self.get_hl()-1);
+                self.set_hl(self.get_hl().wrapping_sub(1));
                 mcycles = 2; 
             },
 
@@ -1197,10 +1218,11 @@ impl CPU{
                 self.set_hl(result);
                 self.set_zero(false);
                 self.set_neg(false);
-                self.set_halfcarry((self.get_hl()&0x0F) + (z as u16&0x0F) > 0x0F);
-                self.set_carry((self.get_hl()&0xFF) + (z as u16&0xFF) > 0xFF);
+                self.set_halfcarry((self.get_hl()&0x0F).wrapping_add(z as u16&0x0F) > 0x0F);
+                self.set_carry((self.get_hl()&0xFF).wrapping_add(z as u16&0xFF) > 0xFF);
                 mcycles = 4;
             },
+           
 
             0x07 => {
                 self.reg_a = self.rotate_left_carry(self.reg_a);
