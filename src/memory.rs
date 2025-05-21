@@ -13,7 +13,7 @@ pub struct Mem{
 impl Mem{
     pub fn new(tim:Weak<RefCell<Timer>>,intrrpt:Weak<RefCell<InterruptHandlerThing>>) -> Self{
         Mem{
-            memory: [0xFF; 0x10000],
+            memory: [0x00; 0x10000],
             timer:tim,
             interrupt_handler: intrrpt
         }

@@ -1221,12 +1221,12 @@ impl CPU{
             0xE8 => {
                 let z:i8 = memory.borrow_mut().read(self.pc as usize) as i8;
                 self.pc += 1;
-                let result = self.get_hl().wrapping_add(z as u16);
-                self.set_hl(result);
+                let result = self.sp.wrapping_add(z as u16);
                 self.set_zero(false);
                 self.set_neg(false);
-                self.set_halfcarry((self.get_hl()&0x0F).wrapping_add(z as u16&0x0F) > 0x0F);
-                self.set_carry((self.get_hl()&0xFF).wrapping_add(z as u16&0xFF) > 0xFF);
+                self.set_halfcarry((z as u16 & 0xF) + (self.sp & 0xF) > 0xF);
+                self.set_carry((z as u16&0xFF) + (self.sp &0xFF) > 0xFF);
+                self.sp = result;
                 mcycles = 4;
             },
            
@@ -2659,6 +2659,22 @@ impl CPU{
                 self.pc = 0x38;
                 mcycles = 4;
             },
+            0x33 =>{
+                self.sp = self.sp.wrapping_add(1);
+                mcycles = 2;
+            },
+            0x3B =>{
+                self.sp = self.sp.wrapping_sub(1);
+                mcycles = 2;
+            },
+            0x39 => {
+                let result = self.get_hl().wrapping_add(self.sp);
+                self.set_neg(false);
+                self.set_halfcarry((self.get_hl() & 0x0FFF) + (self.sp & 0x0FFF) > 0x0FFF);
+                self.set_carry((self.get_hl() as u32&0xFFFF) + (self.sp as u32&0xFFFF) > 0xFFFF);
+                self.set_hl(result);
+                mcycles = 2;
+            }
             _ => ()
         }
         return mcycles
