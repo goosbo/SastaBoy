@@ -40,6 +40,7 @@ impl SastaBoy {
     }
 
     pub fn run(&self){
+        let mut output_buffer = String::from("");
         while self.cpu.borrow().pc < 0xFFFF {
             let mut mcycles = self.cpu.borrow_mut().execute();
             let interrupt_isr = self.interrupt_handler.borrow_mut().check_interrupt();
@@ -55,6 +56,10 @@ impl SastaBoy {
             if self.mem.borrow().read(0xFF02) == 0x81{
                 let c = self.mem.borrow().read(0xFF01);
                 print!("{}", c as char);
+                output_buffer.push(c as char);
+                if output_buffer.contains("Passed") || output_buffer.contains("Failed"){
+                    break;
+                }
                 self.mem.borrow_mut().write(0xFF02, 0x0);
             }
             

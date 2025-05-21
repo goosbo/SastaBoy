@@ -20,6 +20,7 @@ pub struct CPU {
     pub is_halt_bug: bool,
     mem: Weak<RefCell<Mem>>,
     interrupt_thing: Weak<RefCell<InterruptHandlerThing>>,
+    ime_scheduled: bool
     
 }
 
@@ -40,6 +41,7 @@ impl CPU{
             mem: memm,
             is_halted: false,
             is_halt_bug: false,
+            ime_scheduled: false
         }
 
     }
@@ -343,7 +345,12 @@ impl CPU{
         let memory = self.mem.upgrade().expect("memory manager reference dropped!");
         let interrupt_handl = self.interrupt_thing.upgrade().expect("interrupt handler reference dropped!");
 
-         log::debug!("A:{:02X} F:{:02X} B:{:02X} C:{:02X} D:{:02X} E:{:02X} H:{:02X} L:{:02X} SP:{:04X} PC:{:04X} PCMEM:{:02X},{:02X},{:02X},{:02X}",
+        if self.ime_scheduled {
+            interrupt_handl.borrow_mut().ime = true;
+            self.ime_scheduled = false;
+        }
+
+        log::debug!("A:{:02X} F:{:02X} B:{:02X} C:{:02X} D:{:02X} E:{:02X} H:{:02X} L:{:02X} SP:{:04X} PC:{:04X} PCMEM:{:02X},{:02X},{:02X},{:02X}",
         self.reg_a, self.reg_f, self.reg_b, self.reg_c, 
         self.reg_d, self.reg_e, self.reg_h, self.reg_l,
         self.sp, self.pc, 
@@ -710,7 +717,7 @@ impl CPU{
             },
             0xF1 => {
                 let z = self.pop_stack();
-                self.set_af(z);
+                self.set_af(z & 0xFFF0);
                 mcycles = 3;
             },
 
@@ -1168,7 +1175,7 @@ impl CPU{
             0x2F => {
                 self.reg_a = !self.reg_a;
                 self.set_neg(true);
-                self.set_halfcarry(false);
+                self.set_halfcarry(true);
                 mcycles = 1;
             },
 
@@ -2584,7 +2591,7 @@ impl CPU{
                 }
             },
             0xD9 => {
-                interrupt_handl.borrow_mut().set_ime(true);
+                self.ime_scheduled = true;
                 self.pc = self.pop_stack();
                 mcycles = 4;
             },
@@ -2610,7 +2617,7 @@ impl CPU{
                 mcycles = 1;
             },
             0xFB => {
-                interrupt_handl.borrow_mut().set_ime(true);
+                self.ime_scheduled = true;
                 mcycles = 1;
             },
             0x10 => {// made stop be like nop cuz apparently most emulators implement it like this?
