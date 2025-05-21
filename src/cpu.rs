@@ -2595,11 +2595,6 @@ impl CPU{
                 self.pc = self.pop_stack();
                 mcycles = 4;
             },
-            0xDF => {
-                self.push_stack(self.pc);
-                self.pc = 0x18;
-                mcycles = 4;
-            },
             0x00 => {
                 mcycles = 1;
             },
@@ -2623,7 +2618,47 @@ impl CPU{
             0x10 => {// made stop be like nop cuz apparently most emulators implement it like this?
                 self.pc += 1;
                 mcycles = 1;
-            }
+            },
+            0xC7 => {
+                self.push_stack(self.pc);
+                self.pc = 0x00;
+                mcycles = 4;
+            },
+            0xD7 => {
+                self.push_stack(self.pc);
+                self.pc = 0x10;
+                mcycles = 4;
+            },
+            0xE7 => {
+                self.push_stack(self.pc);
+                self.pc = 0x20;
+                mcycles = 4;
+            },
+            0xF7 => {
+                self.push_stack(self.pc);
+                self.pc = 0x30;
+                mcycles = 4;
+            },
+            0xCF => {
+                self.push_stack(self.pc);
+                self.pc = 0x08;
+                mcycles = 4;
+            },
+            0xDF => {
+                self.push_stack(self.pc);
+                self.pc = 0x18;
+                mcycles = 4;
+            },
+            0xEF => {
+                self.push_stack(self.pc);
+                self.pc = 0x28;
+                mcycles = 4;
+            },
+            0xFF => {
+                self.push_stack(self.pc);
+                self.pc = 0x38;
+                mcycles = 4;
+            },
             _ => ()
         }
         return mcycles
