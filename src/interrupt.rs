@@ -12,7 +12,6 @@ impl InterruptHandlerThing {
             ime: false,
             if_: 0x00,
             ie: 0x00,
-
         }
     }
     
@@ -60,8 +59,8 @@ impl InterruptHandlerThing {
         self.ime = set_value;
     }
 
-    pub fn interrupt_requested(&mut self)-> bool{
-        let enabled_interrupts = (self.if_ & self.ie) != 0;
+    pub fn interrupt_requested(&self)-> bool{
+        let enabled_interrupts = ((self.if_&0x1f) & (self.ie&0x1f)) != 0;
         enabled_interrupts
     }
 
@@ -70,7 +69,7 @@ impl InterruptHandlerThing {
             return 0;
         }
 
-        let enabled_interrupts = self.if_ & self.ie;
+        let enabled_interrupts = (self.if_&0x1f) & (self.ie&0x1f);
         if enabled_interrupts == 0{
             return 0;
         }

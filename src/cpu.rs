@@ -20,7 +20,7 @@ pub struct CPU {
     pub is_halt_bug: bool,
     mem: Weak<RefCell<Mem>>,
     interrupt_thing: Weak<RefCell<InterruptHandlerThing>>,
-    ime_scheduled: bool
+
     
 }
 
@@ -41,7 +41,7 @@ impl CPU{
             mem: memm,
             is_halted: false,
             is_halt_bug: false,
-            ime_scheduled: false
+            
         }
 
     }
@@ -339,16 +339,15 @@ impl CPU{
         let result = val | (1<<bit);
         return result
     }
+    pub fn handle_interrupt(&mut self, isr: u16) {
+        self.push_stack(self.pc);
+        self.pc = isr;
+    }
 
     pub fn execute(&mut self) ->u8{
         
         let memory = self.mem.upgrade().expect("memory manager reference dropped!");
         let interrupt_handl = self.interrupt_thing.upgrade().expect("interrupt handler reference dropped!");
-
-        if self.ime_scheduled {
-            interrupt_handl.borrow_mut().ime = true;
-            self.ime_scheduled = false;
-        }
 
         log::debug!("A:{:02X} F:{:02X} B:{:02X} C:{:02X} D:{:02X} E:{:02X} H:{:02X} L:{:02X} SP:{:04X} PC:{:04X} PCMEM:{:02X},{:02X},{:02X},{:02X}",
         self.reg_a, self.reg_f, self.reg_b, self.reg_c, 
@@ -358,19 +357,22 @@ impl CPU{
         memory.borrow().read((self.pc + 1) as usize),
         memory.borrow().read((self.pc + 2) as usize),
         memory.borrow().read((self.pc + 3) as usize));
+        
+        
+        if self.is_halted && !interrupt_handl.borrow().interrupt_requested(){
+            return 1;
+        }
+        else if self.is_halted && interrupt_handl.borrow().interrupt_requested() {//interrupts requested
+            self.is_halted = false;
+            return 1;
+        }
         let opcode = memory.borrow_mut().read(self.pc as usize);
         self.pc += 1;
         if self.is_halt_bug{
+            println!("HALT BUG");
             self.is_halt_bug = false;
             self.pc -= 1;
             return self.run_opcode(opcode);
-        }
-        else if self.is_halted && !interrupt_handl.borrow_mut().interrupt_requested(){
-            return 1;
-        }
-        else if self.is_halted {//interrupts requested
-            self.is_halted = false;
-            return 1;
         }
 
         self.run_opcode(opcode)
@@ -2591,7 +2593,7 @@ impl CPU{
                 }
             },
             0xD9 => {
-                self.ime_scheduled = true;
+                interrupt_handl.borrow_mut().ime = true;
                 self.pc = self.pop_stack();
                 mcycles = 4;
             },
@@ -2600,7 +2602,7 @@ impl CPU{
             },
             0x76 => {
                 if !interrupt_handl.borrow().ime && interrupt_handl.borrow_mut().interrupt_requested(){
-                    self.is_halt_bug = true;
+                    self.is_halt_bug= true;
                 }
                 else{
                     self.is_halted = true;
@@ -2612,7 +2614,7 @@ impl CPU{
                 mcycles = 1;
             },
             0xFB => {
-                self.ime_scheduled = true;
+                interrupt_handl.borrow_mut().ime = true;
                 mcycles = 1;
             },
             0x10 => {// made stop be like nop cuz apparently most emulators implement it like this?

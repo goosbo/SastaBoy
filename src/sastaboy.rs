@@ -43,11 +43,11 @@ impl SastaBoy {
         let mut output_buffer = String::from("");
         while self.cpu.borrow().pc < 0xFFFF {
             let mut mcycles = self.cpu.borrow_mut().execute();
+            self.timer.borrow_mut().tick(mcycles);
+            mcycles = 0;
             let interrupt_isr = self.interrupt_handler.borrow_mut().check_interrupt();
-            if interrupt_isr != 0{
-                let pc = self.cpu.borrow().pc;
-                self.cpu.borrow_mut().push_stack(pc);
-                self.cpu.borrow_mut().pc = interrupt_isr;
+            if interrupt_isr != 0 {
+                self.cpu.borrow_mut().handle_interrupt(interrupt_isr);
                 mcycles += 5;
             }
             self.timer.borrow_mut().tick(mcycles);

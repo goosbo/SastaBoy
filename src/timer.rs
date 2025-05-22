@@ -39,7 +39,7 @@ impl Timer {
     }
 
     pub fn write_div(&mut self){
-        let interrupt_handl = self.interrupt_handler.upgrade().expect("Interrupt handler reference dropped!");
+       let interrupt_handl = self.interrupt_handler.upgrade().expect("Interrupt handler reference dropped!");
         let old_and_result = self.and_result();
         self.div_ctr = 0;
         let new_and_result = self.and_result();
@@ -99,13 +99,14 @@ impl Timer {
 
             if self.tima_overflow_pending{
                 self.tima_overflow_tcycles -= 1;
+                    if self.tima_overflow_tcycles == 0{
+                    self.tima = self.tma;
+                    self.tima_overflow_pending = false;
+                    interrupt_handl.borrow_mut().req_timer();
+                }
             }
 
-            if self.tima_overflow_tcycles == 0{
-                self.tima = self.tma;
-                self.tima_overflow_pending = false;
-                interrupt_handl.borrow_mut().req_timer();
-            }
+            
             if self.tac & 4 != 0 && old_and_result && !new_and_result && !self.tima_overflow_pending{
                 self.tima = self.tima.wrapping_add(1);
                 if self.tima == 0{

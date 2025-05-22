@@ -7,7 +7,7 @@ use crate::interrupt::InterruptHandlerThing;
 pub struct Mem{
     memory: [u8; 0x10000],
     pub timer: Weak<RefCell<Timer>>,
-    interrupt_handler: Weak<RefCell<InterruptHandlerThing>>
+    interrupt_handler: Weak<RefCell<InterruptHandlerThing>>,
 }
 
 impl Mem{
@@ -15,7 +15,7 @@ impl Mem{
         Mem{
             memory: [0x00; 0x10000],
             timer:tim,
-            interrupt_handler: intrrpt
+            interrupt_handler: intrrpt,
         }
         
     }
@@ -36,10 +36,10 @@ impl Mem{
             return timer.borrow().tma;
         }
         else if addr == InterruptHandlerThing::IE_ADDR{
-            return interrupt_handl.borrow().ie;
+            return interrupt_handl.borrow().ie | 0xE0;
         }
         else if addr == InterruptHandlerThing::IF_ADDR{
-            return interrupt_handl.borrow().if_;
+            return interrupt_handl.borrow().if_ | 0xE0;
         }
         else if addr == 0xFF44{
             return 0x90;
@@ -68,11 +68,11 @@ impl Mem{
             return;
         }
         else if addr == InterruptHandlerThing::IE_ADDR{
-            interrupt_handl.borrow_mut().ie = val;
+            interrupt_handl.borrow_mut().ie = (val & 0x1F) | 0xE0;
             return;
         }
         else if addr == InterruptHandlerThing::IF_ADDR{
-            interrupt_handl.borrow_mut().if_ = val;
+            interrupt_handl.borrow_mut().if_ = (val & 0x1F) | 0xE0;
             return;
         }
         self.memory[addr] = val;
